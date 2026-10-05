@@ -60,6 +60,31 @@ class AudiophilesMediaSessionManager(
     private var hasAudioFocus: Boolean = false
     private var isRequestingFocus: Boolean = false
 
+    // Tras una interrupción breve solo se reanuda si estaba sonando; si la pausó el usuario, sigue en pausa.
+    private var resumeOnFocusGain = false
+
+    private val focusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                resumeOnFocusGain = isPlaying
+                hasAudioFocus = false
+                if (isPlaying) onPauseAction()
+            }
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                resumeOnFocusGain = false
+                if (isPlaying) onPauseAction()
+                abandonAudioFocus()
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                hasAudioFocus = true
+                if (resumeOnFocusGain) {
+                    resumeOnFocusGain = false
+                    onPlayAction()
+                }
+            }
+        }
+    }
+
     init {
         createNotificationChannel()
         setupMediaSession()
@@ -170,19 +195,7 @@ class AudiophilesMediaSessionManager(
                     )
                     .setAcceptsDelayedFocusGain(true)
                     .setWillPauseWhenDucked(false)
-                    .setOnAudioFocusChangeListener { focusChange ->
-                        when (focusChange) {
-                            AudioManager.AUDIOFOCUS_LOSS,
-                            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                                hasAudioFocus = false
-                                onPauseAction()
-                            }
-                            AudioManager.AUDIOFOCUS_GAIN -> {
-                                hasAudioFocus = true
-                                onPlayAction()
-                            }
-                        }
-                    }
+                    .setOnAudioFocusChangeListener(focusChangeListener)
                     .build()
                     .also { currentAudioFocusRequest = it }
 
@@ -190,19 +203,7 @@ class AudiophilesMediaSessionManager(
             } else {
                 @Suppress("DEPRECATION")
                 audioManager.requestAudioFocus(
-                    { focusChange ->
-                        when (focusChange) {
-                            AudioManager.AUDIOFOCUS_LOSS,
-                            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                                hasAudioFocus = false
-                                onPauseAction()
-                            }
-                            AudioManager.AUDIOFOCUS_GAIN -> {
-                                hasAudioFocus = true
-                                onPlayAction()
-                            }
-                        }
-                    },
+                    focusChangeListener,
                     AudioManager.STREAM_MUSIC,
                     AudioManager.AUDIOFOCUS_GAIN
                 ) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
@@ -228,7 +229,7 @@ class AudiophilesMediaSessionManager(
                 currentAudioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
             } else {
                 @Suppress("DEPRECATION")
-                audioManager.abandonAudioFocus(null)
+                audioManager.abandonAudioFocus(focusChangeListener)
             }
         } catch (_: Exception) {}
         hasAudioFocus = false
