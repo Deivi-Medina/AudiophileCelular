@@ -14,16 +14,19 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlaylistSongEntity::class,
         SongReviewEntity::class,
         FavoriteSongEntity::class,
-        RecentSongEntity::class
+        RecentSongEntity::class,
+        ListenLaterEntity::class,
+        PinnedFavoriteEntity::class
     ],
-    version = 4,
-    exportSchema = false
+    version = 5,
+    exportSchema = true
 )
 abstract class AudiophilesDatabase : RoomDatabase() {
     abstract fun downloadedSongDao(): DownloadedSongDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun songReviewDao(): SongReviewDao
     abstract fun favoriteAndRecentDao(): FavoriteAndRecentDao
+    abstract fun reviewExtrasDao(): ReviewExtrasDao
 
     companion object {
         @Volatile
@@ -42,6 +45,21 @@ abstract class AudiophilesDatabase : RoomDatabase() {
             }
         }
 
+        /** v4 → v5: portada en reseñas, lista "Por escuchar" y 5 favoritas fijadas. */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE song_reviews ADD COLUMN coverUrl TEXT")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `listen_later` (`songId` TEXT NOT NULL, `songTitle` TEXT NOT NULL, " +
+                        "`artist` TEXT NOT NULL, `coverUrl` TEXT, `addedAt` INTEGER NOT NULL, PRIMARY KEY(`songId`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `pinned_favorites` (`position` INTEGER NOT NULL, `songId` TEXT NOT NULL, " +
+                        "`songTitle` TEXT NOT NULL, `artist` TEXT NOT NULL, `coverUrl` TEXT, PRIMARY KEY(`position`))"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AudiophilesDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -49,7 +67,7 @@ abstract class AudiophilesDatabase : RoomDatabase() {
                     AudiophilesDatabase::class.java,
                     "audiophiles_database"
                 )
-                    .addMigrations(MIGRATION_2_3)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

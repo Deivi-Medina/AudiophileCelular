@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import com.example.data.model.SongRef
+import com.example.ui.components.ReviewsJournalSection
+import com.example.ui.components.SongPickTarget
+import com.example.ui.components.SongPickerDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -81,9 +85,17 @@ fun ProfileScreen(
     viewModel: SearchAndDownloadViewModel,
     downloadedCount: Int,
     playlistsCount: Int,
+    onOpenSongReviews: (SongRef) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val profile by viewModel.userProfile.collectAsState()
+    val allReviews by viewModel.allReviews.collectAsState()
+    val listenLater by viewModel.listenLater.collectAsState()
+    val pinnedFavorites by viewModel.pinnedFavorites.collectAsState()
+    val localSongs by viewModel.localSongs.collectAsState()
+    val reviewSearchResults by viewModel.reviewSearchResults.collectAsState()
+    val isReviewSearching by viewModel.isReviewSearching.collectAsState()
+    var pickTarget by remember { mutableStateOf<SongPickTarget?>(null) }
     var isEditDialogOpen by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -238,6 +250,18 @@ fun ProfileScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            ReviewsJournalSection(
+                reviews = allReviews,
+                listenLater = listenLater,
+                pinnedFavorites = pinnedFavorites,
+                onOpenSong = onOpenSongReviews,
+                onPick = { pickTarget = it },
+                onUnpinFavorite = { viewModel.unpinFavorite(it) },
+                onRemoveListenLater = { viewModel.removeFromListenLater(it) }
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             // Estadísticas Reales
             Text(
                 text = "ESTADÍSTICAS DEL SISTEMA",
@@ -320,6 +344,33 @@ fun ProfileScreen(
             }
 
             Spacer(modifier = Modifier.height(30.dp))
+        }
+
+        pickTarget?.let { target ->
+            val closePicker = {
+                pickTarget = null
+                viewModel.searchSongsForReview("")
+            }
+            SongPickerDialog(
+                title = when (target) {
+                    SongPickTarget.Review -> "¿Qué canción quieres reseñar?"
+                    SongPickTarget.ListenLater -> "Añadir a Por escuchar"
+                    is SongPickTarget.Favorite -> "Elige tu favorita #${target.position + 1}"
+                },
+                localSongs = localSongs,
+                remoteResults = reviewSearchResults,
+                isSearching = isReviewSearching,
+                onQueryChange = { viewModel.searchSongsForReview(it) },
+                onPick = { song ->
+                    when (target) {
+                        SongPickTarget.Review -> onOpenSongReviews(song)
+                        SongPickTarget.ListenLater -> viewModel.addToListenLater(song)
+                        is SongPickTarget.Favorite -> viewModel.pinFavorite(target.position, song)
+                    }
+                    closePicker()
+                },
+                onDismiss = closePicker
+            )
         }
 
         // Diálogo para personalizar perfil

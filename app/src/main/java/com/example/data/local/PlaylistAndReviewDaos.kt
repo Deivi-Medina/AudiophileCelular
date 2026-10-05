@@ -80,3 +80,23 @@ interface SongReviewDao {
     @Query("DELETE FROM song_reviews WHERE id = :id")
     suspend fun deleteReview(id: Long)
 }
+@Dao
+interface ReviewExtrasDao {
+    @Query("SELECT * FROM listen_later ORDER BY addedAt DESC")
+    fun getListenLater(): Flow<List<ListenLaterEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertListenLater(item: ListenLaterEntity)
+
+    @Query("DELETE FROM listen_later WHERE songId = :songId")
+    suspend fun deleteListenLater(songId: String)
+
+    @Query("SELECT * FROM pinned_favorites ORDER BY position ASC")
+    fun getPinnedFavorites(): Flow<List<PinnedFavoriteEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPinnedFavorite(item: PinnedFavoriteEntity)
+
+    @Query("DELETE FROM pinned_favorites WHERE position = :position")
+    suspend fun deletePinnedFavorite(position: Int)
+}

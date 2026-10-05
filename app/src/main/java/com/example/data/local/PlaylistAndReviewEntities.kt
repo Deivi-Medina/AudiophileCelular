@@ -37,5 +37,25 @@ data class SongReviewEntity(
     val authorName: String,
     val rating: Float, // 1.0 a 5.0 estrellas
     val comment: String,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val coverUrl: String? = null
+)
+
+@Entity(tableName = "listen_later")
+data class ListenLaterEntity(
+    @PrimaryKey val songId: String,
+    val songTitle: String,
+    val artist: String,
+    val coverUrl: String?,
+    val addedAt: Long = System.currentTimeMillis()
+)
+
+/** Las 5 favoritas fijadas en el perfil; `position` va de 0 a 4. */
+@Entity(tableName = "pinned_favorites")
+data class PinnedFavoriteEntity(
+    @PrimaryKey val position: Int,
+    val songId: String,
+    val songTitle: String,
+    val artist: String,
+    val coverUrl: String?
 )

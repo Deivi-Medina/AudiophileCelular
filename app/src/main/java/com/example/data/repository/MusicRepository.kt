@@ -1,5 +1,8 @@
 package com.example.data.repository
 
+import com.example.data.local.ListenLaterEntity
+import com.example.data.local.PinnedFavoriteEntity
+import com.example.data.model.SongRef
 import android.content.Context
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
@@ -42,6 +45,7 @@ class MusicRepository(private val context: Context) {
     private val dao = database.downloadedSongDao()
     private val playlistDao = database.playlistDao()
     private val reviewDao = database.songReviewDao()
+    private val reviewExtrasDao = database.reviewExtrasDao()
     private val favoriteAndRecentDao = database.favoriteAndRecentDao()
     private val userProfileManager = UserProfileManager(context)
     private val workManager = WorkManager.getInstance(context)
@@ -608,8 +612,30 @@ class MusicRepository(private val context: Context) {
 
     fun getAllReviews(): Flow<List<SongReviewEntity>> = reviewDao.getAllReviews()
 
+    fun getListenLater(): Flow<List<ListenLaterEntity>> = reviewExtrasDao.getListenLater()
+
+    suspend fun addToListenLater(song: SongRef) = withContext(Dispatchers.IO) {
+        reviewExtrasDao.insertListenLater(ListenLaterEntity(song.songId, song.title, song.artist, song.coverUrl))
+    }
+
+    suspend fun removeFromListenLater(songId: String) = withContext(Dispatchers.IO) {
+        reviewExtrasDao.deleteListenLater(songId)
+    }
+
+    fun getPinnedFavorites(): Flow<List<PinnedFavoriteEntity>> = reviewExtrasDao.getPinnedFavorites()
+
+    suspend fun pinFavorite(position: Int, song: SongRef) = withContext(Dispatchers.IO) {
+        reviewExtrasDao.insertPinnedFavorite(
+            PinnedFavoriteEntity(position, song.songId, song.title, song.artist, song.coverUrl)
+        )
+    }
+
+    suspend fun unpinFavorite(position: Int) = withContext(Dispatchers.IO) {
+        reviewExtrasDao.deletePinnedFavorite(position)
+    }
+
     suspend fun updateSongReview(id: Long, rating: Float, comment: String) = withContext(Dispatchers.IO) {
-        reviewDao.updateReview(id, rating.coerceIn(1f, 5f), comment)
+        reviewDao.updateReview(id, rating.coerceIn(0.5f, 5f), comment)
     }
 
     suspend fun deleteSongReview(id: Long) = withContext(Dispatchers.IO) {
@@ -621,17 +647,20 @@ class MusicRepository(private val context: Context) {
         songTitle: String,
         artist: String,
         rating: Float,
-        comment: String
+        comment: String,
+        coverUrl: String? = null
     ) = withContext(Dispatchers.IO) {
         val author = userProfileManager.profile.value.username
+        reviewExtrasDao.deleteListenLater(songId)
         reviewDao.insertReview(
             SongReviewEntity(
                 songId = songId,
                 songTitle = songTitle,
                 artist = artist,
                 authorName = author,
-                rating = rating.coerceIn(1f, 5f),
-                comment = comment
+                rating = rating.coerceIn(0.5f, 5f),
+                comment = comment,
+                coverUrl = coverUrl
             )
         )
     }

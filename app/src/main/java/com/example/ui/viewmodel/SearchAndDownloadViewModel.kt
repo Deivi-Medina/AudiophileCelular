@@ -1,5 +1,8 @@
 package com.example.ui.viewmodel
 
+import com.example.data.local.ListenLaterEntity
+import com.example.data.local.PinnedFavoriteEntity
+import com.example.data.model.SongRef
 import android.app.Application
 import android.media.AudioAttributes
 import android.media.MediaPlayer
@@ -1280,8 +1283,8 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
 
     // ─── RESEÑAS ────────────────────────────────────────────
 
-    fun addReview(songId: String, title: String, artist: String, rating: Float, comment: String) {
-        viewModelScope.launch { repository.addSongReview(songId, title, artist, rating, comment) }
+    fun addReview(songId: String, title: String, artist: String, rating: Float, comment: String, coverUrl: String? = null) {
+        viewModelScope.launch { repository.addSongReview(songId, title, artist, rating, comment, coverUrl) }
     }
 
     fun getReviewsForSong(songId: String) = repository.getReviewsForSong(songId)
@@ -1295,6 +1298,65 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
 
     fun deleteReview(id: Long) {
         viewModelScope.launch { repository.deleteSongReview(id) }
+    }
+
+    val listenLater: StateFlow<List<ListenLaterEntity>> = repository.getListenLater()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val pinnedFavorites: StateFlow<List<PinnedFavoriteEntity>> = repository.getPinnedFavorites()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun addToListenLater(song: SongRef) {
+        viewModelScope.launch { repository.addToListenLater(song) }
+    }
+
+    fun removeFromListenLater(songId: String) {
+        viewModelScope.launch { repository.removeFromListenLater(songId) }
+    }
+
+    fun toggleListenLater(song: SongRef) {
+        if (listenLater.value.any { it.songId == song.songId }) removeFromListenLater(song.songId)
+        else addToListenLater(song)
+    }
+
+    fun pinFavorite(position: Int, song: SongRef) {
+        viewModelScope.launch { repository.pinFavorite(position, song) }
+    }
+
+    fun unpinFavorite(position: Int) {
+        viewModelScope.launch { repository.unpinFavorite(position) }
+    }
+
+    private val _reviewSearchResults = MutableStateFlow<List<YouTubeTrackResult>>(emptyList())
+    val reviewSearchResults: StateFlow<List<YouTubeTrackResult>> = _reviewSearchResults.asStateFlow()
+
+    private val _isReviewSearching = MutableStateFlow(false)
+    val isReviewSearching: StateFlow<Boolean> = _isReviewSearching.asStateFlow()
+
+    private var reviewSearchJob: Job? = null
+
+    /** Búsqueda propia del buscador de reseñas, para no tocar la de Explorar. */
+    fun searchSongsForReview(query: String) {
+        reviewSearchJob?.cancel()
+        if (query.isBlank()) {
+            _reviewSearchResults.value = emptyList()
+            _isReviewSearching.value = false
+            return
+        }
+        _isReviewSearching.value = true
+        reviewSearchJob = viewModelScope.launch {
+            delay(400)
+            val results = try {
+                repository.searchTracks(query)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Error buscando para reseñar: ${e.message}")
+                emptyList()
+            }
+            _reviewSearchResults.value = results
+            _isReviewSearching.value = false
+        }
     }
 
     // ─── PERFIL ─────────────────────────────────────────────

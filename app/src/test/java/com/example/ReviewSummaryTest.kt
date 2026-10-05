@@ -2,16 +2,20 @@ package com.example
 
 import com.example.data.local.SongReviewEntity
 import com.example.data.model.averageRating
-import com.example.data.model.summarizeBySong
+import com.example.data.model.groupByMonth
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.util.Calendar
 
 class ReviewSummaryTest {
 
-    private fun review(songId: String, rating: Float, createdAt: Long, title: String = "T$songId") =
+    private fun at(year: Int, month: Int, day: Int): Long =
+        Calendar.getInstance().apply { set(year, month, day, 12, 0, 0) }.timeInMillis
+
+    private fun review(songId: String, rating: Float, createdAt: Long) =
         SongReviewEntity(
             songId = songId,
-            songTitle = title,
+            songTitle = "T$songId",
             artist = "A",
             authorName = "Yo",
             rating = rating,
@@ -25,26 +29,23 @@ class ReviewSummaryTest {
     }
 
     @Test
-    fun `average rating`() {
-        val reviews = listOf(review("1", 5f, 1), review("1", 4f, 2), review("1", 3f, 3))
+    fun `average supports half stars`() {
+        val reviews = listOf(review("1", 4.5f, 1), review("1", 3.5f, 2))
         assertEquals(4f, reviews.averageRating(), 0.0001f)
     }
 
     @Test
-    fun `summarize groups by song and orders by latest review`() {
+    fun `groups diary by month, newest first`() {
         val reviews = listOf(
-            review("a", 5f, 10, title = "Vieja"),
-            review("b", 2f, 20),
-            review("a", 3f, 30, title = "Nueva")
+            review("a", 5f, at(2026, Calendar.SEPTEMBER, 3)),
+            review("b", 2f, at(2026, Calendar.OCTOBER, 1)),
+            review("c", 3f, at(2026, Calendar.OCTOBER, 4)),
+            review("d", 1f, at(2025, Calendar.OCTOBER, 4))
         )
 
-        val summary = reviews.summarizeBySong()
+        val months = reviews.groupByMonth()
 
-        assertEquals(listOf("a", "b"), summary.map { it.songId })
-        assertEquals(2, summary[0].reviewCount)
-        assertEquals(4f, summary[0].averageRating, 0.0001f)
-        assertEquals(30L, summary[0].lastReviewedAt)
-        assertEquals("Nueva", summary[0].songTitle)
-        assertEquals(1, summary[1].reviewCount)
+        assertEquals(listOf("Octubre 2026", "Septiembre 2026", "Octubre 2025"), months.map { it.label })
+        assertEquals(listOf("c", "b"), months[0].reviews.map { it.songId })
     }
 }

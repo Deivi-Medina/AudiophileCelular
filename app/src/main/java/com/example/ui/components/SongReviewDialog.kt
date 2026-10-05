@@ -1,5 +1,14 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material.icons.filled.BookmarkAdded
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import kotlin.math.ceil
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -90,6 +99,24 @@ fun RatingStars(rating: Float, starSize: Dp, modifier: Modifier = Modifier) {
     }
 }
 
+/** Selector de 1/2 a 5 estrellas: toca o arrastra sobre las estrellas. */
+@Composable
+fun RatingPicker(rating: Float, onRatingChange: (Float) -> Unit, starSize: Dp = 34.dp) {
+    val currentOnChange by rememberUpdatedState(onRatingChange)
+    var widthPx by remember { mutableIntStateOf(1) }
+    fun ratingAt(x: Float): Float = (ceil(x / widthPx * 10f) / 2f).coerceIn(0.5f, 5f)
+    RatingStars(
+        rating = rating,
+        starSize = starSize,
+        modifier = Modifier
+            .onSizeChanged { widthPx = it.width.coerceAtLeast(1) }
+            .pointerInput(Unit) { detectTapGestures { currentOnChange(ratingAt(it.x)) } }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures { change, _ -> currentOnChange(ratingAt(change.position.x)) }
+            }
+    )
+}
+
 @Composable
 fun SongReviewDialog(
     visible: Boolean,
@@ -99,7 +126,9 @@ fun SongReviewDialog(
     onDismiss: () -> Unit,
     onSubmitReview: (rating: Float, comment: String) -> Unit,
     onUpdateReview: (reviewId: Long, rating: Float, comment: String) -> Unit,
-    onDeleteReview: (reviewId: Long) -> Unit
+    onDeleteReview: (reviewId: Long) -> Unit,
+    isInListenLater: Boolean = false,
+    onToggleListenLater: (() -> Unit)? = null
 ) {
     if (!visible) return
 
@@ -182,29 +211,17 @@ fun SongReviewDialog(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        for (i in 1..5) {
-                            val filled = i <= rating
-                            Icon(
-                                imageVector = if (filled) Icons.Default.Star else Icons.Default.StarBorder,
-                                contentDescription = "$i estrellas",
-                                tint = if (filled) StarGold else TextSecondary,
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clickable { rating = i.toFloat() }
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RatingPicker(rating = rating, onRatingChange = { rating = it })
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "${rating.toInt()}/5",
+                            text = formatRating(rating),
                             color = StarGold,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            fontSize = 16.sp
                         )
                     }
+                    Text("Toca o desliza; puedes poner medias estrellas", color = TextMuted, fontSize = 10.sp)
 
                     Spacer(modifier = Modifier.height(14.dp))
 
@@ -261,11 +278,28 @@ fun SongReviewDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = if (existingReviews.isEmpty()) "Sin reseñas" else "Historial",
-                            color = TextSecondary,
-                            fontSize = 12.sp
-                        )
+                        if (onToggleListenLater != null) {
+                            TextButton(onClick = onToggleListenLater) {
+                                Icon(
+                                    imageVector = if (isInListenLater) Icons.Default.BookmarkAdded else Icons.Default.BookmarkBorder,
+                                    contentDescription = null,
+                                    tint = if (isInListenLater) Accent else TextSecondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isInListenLater) "En Por escuchar" else "Por escuchar",
+                                    color = if (isInListenLater) Accent else TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = if (existingReviews.isEmpty()) "Sin reseñas" else "Historial",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
                         Button(
                             onClick = { openForm(null) },
                             colors = ButtonDefaults.buttonColors(containerColor = Accent),
