@@ -606,6 +606,16 @@ class MusicRepository(private val context: Context) {
     fun getAllRecentReviews(): Flow<List<SongReviewEntity>> =
         reviewDao.getAllRecentReviews()
 
+    fun getAllReviews(): Flow<List<SongReviewEntity>> = reviewDao.getAllReviews()
+
+    suspend fun updateSongReview(id: Long, rating: Float, comment: String) = withContext(Dispatchers.IO) {
+        reviewDao.updateReview(id, rating.coerceIn(1f, 5f), comment)
+    }
+
+    suspend fun deleteSongReview(id: Long) = withContext(Dispatchers.IO) {
+        reviewDao.deleteReview(id)
+    }
+
     suspend fun addSongReview(
         songId: String,
         songTitle: String,

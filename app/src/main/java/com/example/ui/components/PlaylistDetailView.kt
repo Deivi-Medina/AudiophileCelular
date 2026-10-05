@@ -728,10 +728,13 @@ fun PlaylistDetailView(
                                     .padding(horizontal = 20.dp),
                                 contentAlignment = Alignment.CenterStart
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Color.White)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Añadir a la cola", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                // Solo visible mientras se desliza: si no, se transparenta tras tarjetas translúcidas (seleccionada/actual).
+                                if (dismissState.dismissDirection == SwipeToDismissBoxValue.StartToEnd) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(imageVector = Icons.Default.Check, contentDescription = null, tint = Color.White)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Añadir a la cola", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
                                 }
                             }
                         },
