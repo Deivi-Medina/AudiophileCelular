@@ -1,12 +1,20 @@
 package com.example.data.model
 
 import com.example.data.local.PlaylistSongEntity
+import java.util.concurrent.atomic.AtomicLong
 
 enum class RepeatMode { OFF, ALL, ONE }
 
 sealed class PlaybackQueueItem {
+    /** Identidad única por entrada de la cola (no participa en equals); permite duplicados en listas con keys. */
+    val uid: Long = nextUid.getAndIncrement()
+
     data class Stream(val track: YouTubeTrackResult) : PlaybackQueueItem()
     data class Local(val song: LocalSong) : PlaybackQueueItem()
+
+    private companion object {
+        val nextUid = AtomicLong(0)
+    }
 }
 
 data class PlaybackQueue(

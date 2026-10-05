@@ -1,6 +1,27 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.launch
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
+import kotlin.math.roundToInt
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -87,7 +108,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.R
@@ -296,16 +316,30 @@ fun CosmicFullPlayerSheet(
                         Text("La cola de reproducción está vacía", color = TextSecondary, fontSize = 14.sp)
                     }
                 } else {
+                    Text(
+                        text = "Mantén presionada una canción para moverla · desliza para quitarla",
+                        color = TextMuted,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    val haptic = LocalHapticFeedback.current
+                    val queueListState = rememberLazyListState()
+                    val reorderState = rememberReorderableLazyListState(queueListState) { from, to ->
+                        onReorderQueue(from.index, to.index)
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
+
                     LazyColumn(
+                        state = queueListState,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(340.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        itemsIndexed(playbackQueue.items) { idx, item ->
+                        itemsIndexed(playbackQueue.items, key = { _, item -> item.uid }) { idx, item ->
                             val isCurrent = idx == playbackQueue.currentIndex
-                            var itemOffset by remember { mutableStateOf(0f) }
-                            var isDragging by remember { mutableStateOf(false) }
+                            val currentIdx by rememberUpdatedState(idx)
 
                             val itemTitle = when (item) {
                                 is PlaybackQueueItem.Stream -> item.track.title
@@ -316,145 +350,36 @@ fun CosmicFullPlayerSheet(
                                 is PlaybackQueueItem.Local -> item.song.artist
                             }
 
-                            Card(
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = when {
-                                        isDragging -> Accent.copy(alpha = 0.35f)
-                                        isCurrent -> Accent.copy(alpha = 0.15f)
-                                        else -> BgCard
+                            ReorderableItem(reorderState, key = item.uid) { isDragging ->
+                                val dismissState = rememberSwipeToDismissBoxState()
+                                LaunchedEffect(dismissState.currentValue) {
+                                    if (dismissState.currentValue != SwipeToDismissBoxValue.Settled) {
+                                        onRemoveQueueIndex(currentIdx)
                                     }
-                                ),
-                                border = BorderStroke(
-                                    1.dp,
-                                    when {
-                                        isDragging -> Accent
-                                        isCurrent -> Accent
-                                        else -> GlassBorder
-                                    }
-                                ),
-                                elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 16.dp else 0.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .zIndex(if (isDragging) 10f else 1f)
-                                    .graphicsLayer {
-                                        translationY = if (isDragging) itemOffset else 0f
-                                        scaleX = if (isDragging) 1.02f else 1f
-                                        scaleY = if (isDragging) 1.02f else 1f
-                                        shadowElevation = if (isDragging) 16f else 0f
-                                    }
-                                    .pointerInput(idx, isCurrent) {
-                                        if (!isCurrent) {
-                                            detectVerticalDragGestures(
-                                                onDragStart = { isDragging = true },
-                                                onDragEnd = {
-                                                    isDragging = false
-                                                    itemOffset = 0f
-                                                },
-                                                onDragCancel = {
-                                                    isDragging = false
-                                                    itemOffset = 0f
-                                                },
-                                                onVerticalDrag = { change, dragAmount ->
-                                                    change.consume()
-                                                    itemOffset += dragAmount
-                                                    val itemHeightPx = 65f * density.density
-                                                    if (itemOffset > itemHeightPx && idx < playbackQueue.items.lastIndex) {
-                                                        onReorderQueue(idx, idx + 1)
-                                                        itemOffset = 0f
-                                                    } else if (itemOffset < -itemHeightPx && idx > 0) {
-                                                        onReorderQueue(idx, idx - 1)
-                                                        itemOffset = 0f
-                                                    }
-                                                }
-                                            )
-                                        }
-                                    }
-                                    .clickable {
-                                        showQueueBottomSheet = false
-                                        onPlayQueueIndex(idx)
-                                    }
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                }
+
+                                SwipeToDismissBox(
+                                    state = dismissState,
+                                    gesturesEnabled = !isCurrent && !isDragging,
+                                    backgroundContent = { QueueItemDeleteBackground(dismissState.dismissDirection) }
                                 ) {
-                                    if (isCurrent) {
-                                        Icon(
-                                            imageVector = Icons.Default.GraphicEq,
-                                            contentDescription = "Sonando",
-                                            tint = Accent,
-                                            modifier = Modifier
-                                                .width(24.dp)
-                                                .size(18.dp)
-                                        )
-                                    } else {
-                                        Text(
-                                            text = "${idx + 1}",
-                                            color = TextMuted,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.width(24.dp)
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.width(8.dp))
-
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = itemTitle,
-                                            color = if (isCurrent) Accent else TextPrimary,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 13.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = itemArtist,
-                                            color = TextSecondary,
-                                            fontSize = 11.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-
-                                    if (!isCurrent) {
-                                        IconButton(
-                                            onClick = { onRemoveQueueIndex(idx) },
-                                            modifier = Modifier.size(32.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Eliminar de la cola",
-                                                tint = TextMuted,
-                                                modifier = Modifier.size(16.dp)
-                                            )
+                                    QueueItemCard(
+                                        index = idx,
+                                        title = itemTitle,
+                                        artist = itemArtist,
+                                        isCurrent = isCurrent,
+                                        isDragging = isDragging,
+                                        modifier = Modifier.longPressDraggableHandle(
+                                            onDragStarted = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
+                                        ),
+                                        handleModifier = Modifier.draggableHandle(
+                                            onDragStarted = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
+                                        ),
+                                        onClick = {
+                                            showQueueBottomSheet = false
+                                            onPlayQueueIndex(currentIdx)
                                         }
-
-                                        Spacer(modifier = Modifier.width(4.dp))
-
-                                        Icon(
-                                            imageVector = Icons.Default.DragHandle,
-                                            contentDescription = "Arrastrar",
-                                            tint = if (isDragging) Accent else TextSecondary,
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                    } else {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = AccentDim
-                                        ) {
-                                            Text(
-                                                text = "Actual",
-                                                color = Accent,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -578,28 +503,55 @@ fun CosmicFullPlayerSheet(
         ) + fadeOut(animationSpec = tween(200)),
         modifier = modifier
     ) {
-        var swipeOffsetY by remember { mutableStateOf(0f) }
+        val scope = rememberCoroutineScope()
+        val swipeOffsetY = remember { Animatable(0f) }
+        val dismissVelocityPx = with(density) { 1000.dp.toPx() }
+
+        LaunchedEffect(visible) {
+            if (visible) swipeOffsetY.snapTo(0f)
+        }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .offset { IntOffset(0, swipeOffsetY.coerceAtLeast(0f).toInt()) }
+                .offset { IntOffset(0, swipeOffsetY.value.roundToInt()) }
                 .background(BgPrimary)
                 .background(ambientGradient)
                 .pointerInput(Unit) {
+                    val velocityTracker = VelocityTracker()
+                    var totalDrag = 0f
                     detectVerticalDragGestures(
+                        onDragStart = {
+                            velocityTracker.resetTracking()
+                            totalDrag = swipeOffsetY.value
+                        },
                         onVerticalDrag = { change, dragAmount ->
                             change.consume()
-                            swipeOffsetY = (swipeOffsetY + dragAmount).coerceAtLeast(0f)
+                            // El Box se desplaza con el dedo, así que se mide el arrastre acumulado
+                            // en vez de la posición local para obtener una velocidad real.
+                            totalDrag = (totalDrag + dragAmount).coerceAtLeast(0f)
+                            velocityTracker.addPosition(change.uptimeMillis, Offset(0f, totalDrag))
+                            scope.launch { swipeOffsetY.snapTo(totalDrag) }
                         },
                         onDragEnd = {
-                            if (swipeOffsetY > 140f) {
-                                onClose()
+                            val velocityY = velocityTracker.calculateVelocity().y
+                            val sheetHeight = size.height.toFloat()
+                            val shouldDismiss = totalDrag > sheetHeight * 0.25f || velocityY > dismissVelocityPx
+                            scope.launch {
+                                if (shouldDismiss) {
+                                    swipeOffsetY.animateTo(
+                                        targetValue = sheetHeight,
+                                        animationSpec = tween(durationMillis = 220, easing = LinearOutSlowInEasing),
+                                        initialVelocity = velocityY.coerceAtLeast(0f)
+                                    )
+                                    onClose()
+                                } else {
+                                    swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow))
+                                }
                             }
-                            swipeOffsetY = 0f
                         },
                         onDragCancel = {
-                            swipeOffsetY = 0f
+                            scope.launch { swipeOffsetY.animateTo(0f, spring(stiffness = Spring.StiffnessMediumLow)) }
                         }
                     )
                 }
@@ -623,6 +575,7 @@ fun CosmicFullPlayerSheet(
                     IconButton(
                         onClick = onClose,
                         modifier = Modifier
+                            .blockSheetSwipe()
                             .size(42.dp)
                             .clip(CircleShape)
                             .background(Color(0x33FFFFFF))
@@ -659,6 +612,7 @@ fun CosmicFullPlayerSheet(
                         IconButton(
                             onClick = { showQueueBottomSheet = true },
                             modifier = Modifier
+                                .blockSheetSwipe()
                                 .size(42.dp)
                                 .clip(CircleShape)
                                 .background(Color(0x33FFFFFF))
@@ -679,6 +633,7 @@ fun CosmicFullPlayerSheet(
                         IconButton(
                             onClick = { showMenuBottomSheet = true },
                             modifier = Modifier
+                                .blockSheetSwipe()
                                 .size(42.dp)
                                 .clip(CircleShape)
                                 .background(Color(0x33FFFFFF))
@@ -774,7 +729,7 @@ fun CosmicFullPlayerSheet(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Barra de línea de tiempo
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.fillMaxWidth().blockSheetSwipe()) {
                     Slider(
                         value = progress.coerceIn(0f, 1f),
                         onValueChange = onSeek,
@@ -827,7 +782,7 @@ fun CosmicFullPlayerSheet(
 
                 // Controles principales
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().blockSheetSwipe(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -907,6 +862,146 @@ fun CosmicFullPlayerSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
             }
+        }
+    }
+}
+
+/**
+ * Evita que el gesto de deslizar-para-cerrar del reproductor arranque desde este elemento.
+ * Solo consume el movimiento cuando supera media "touch slop" (antes que el gesto padre),
+ * así los toques con un pequeño temblor siguen contando como clic.
+ */
+private fun Modifier.blockSheetSwipe(): Modifier = pointerInput(Unit) {
+    val threshold = viewConfiguration.touchSlop / 2f
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        var travelled = Offset.Zero
+        do {
+            val event = awaitPointerEvent()
+            event.changes.forEach { change ->
+                travelled += change.positionChange()
+                if (travelled.getDistance() > threshold) change.consume()
+            }
+        } while (event.changes.any { it.pressed })
+    }
+}
+
+@Composable
+private fun QueueItemDeleteBackground(direction: SwipeToDismissBoxValue) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFFFF453A).copy(alpha = 0.85f))
+            .padding(horizontal = 20.dp),
+        contentAlignment = if (direction == SwipeToDismissBoxValue.StartToEnd) Alignment.CenterStart else Alignment.CenterEnd
+    ) {
+        Icon(
+            imageVector = Icons.Default.Delete,
+            contentDescription = "Quitar de la cola",
+            tint = Color.White
+        )
+    }
+}
+
+@Composable
+private fun QueueItemCard(
+    index: Int,
+    title: String,
+    artist: String,
+    isCurrent: Boolean,
+    isDragging: Boolean,
+    modifier: Modifier,
+    handleModifier: Modifier,
+    onClick: () -> Unit
+) {
+    val scale by animateFloatAsState(if (isDragging) 1.03f else 1f, label = "queueItemScale")
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = when {
+                isDragging -> Color(0xFF2A1D45)
+                isCurrent -> Color(0xFF221836)
+                else -> BgCard
+            }
+        ),
+        border = BorderStroke(1.dp, if (isDragging || isCurrent) Accent else GlassBorder),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDragging) 12.dp else 0.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isCurrent) {
+                Icon(
+                    imageVector = Icons.Default.GraphicEq,
+                    contentDescription = "Sonando",
+                    tint = Accent,
+                    modifier = Modifier
+                        .width(24.dp)
+                        .size(18.dp)
+                )
+            } else {
+                Text(
+                    text = "${index + 1}",
+                    color = TextMuted,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.width(24.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    color = if (isCurrent) Accent else TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = artist,
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (isCurrent) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = AccentDim
+                ) {
+                    Text(
+                        text = "Actual",
+                        color = Accent,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+
+            Icon(
+                imageVector = Icons.Default.DragHandle,
+                contentDescription = "Arrastrar para reordenar",
+                tint = if (isDragging) Accent else TextSecondary,
+                modifier = handleModifier.size(24.dp)
+            )
         }
     }
 }
