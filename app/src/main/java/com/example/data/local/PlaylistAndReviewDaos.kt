@@ -70,4 +70,13 @@ interface SongReviewDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertReview(review: SongReviewEntity): Long
+
+    @Query("SELECT * FROM song_reviews ORDER BY createdAt DESC")
+    fun getAllReviews(): Flow<List<SongReviewEntity>>
+
+    @Query("UPDATE song_reviews SET rating = :rating, comment = :comment WHERE id = :id")
+    suspend fun updateReview(id: Long, rating: Float, comment: String)
+
+    @Query("DELETE FROM song_reviews WHERE id = :id")
+    suspend fun deleteReview(id: Long)
 }

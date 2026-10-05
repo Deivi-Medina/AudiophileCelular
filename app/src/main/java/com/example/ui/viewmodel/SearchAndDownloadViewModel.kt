@@ -1286,6 +1286,17 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
 
     fun getReviewsForSong(songId: String) = repository.getReviewsForSong(songId)
 
+    val allReviews: StateFlow<List<SongReviewEntity>> = repository.getAllReviews()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun updateReview(id: Long, rating: Float, comment: String) {
+        viewModelScope.launch { repository.updateSongReview(id, rating, comment) }
+    }
+
+    fun deleteReview(id: Long) {
+        viewModelScope.launch { repository.deleteSongReview(id) }
+    }
+
     // ─── PERFIL ─────────────────────────────────────────────
 
     fun updateProfile(newProfile: UserProfile) {

@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.material.icons.filled.Star
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -147,7 +148,7 @@ fun HomeScreen(
 
     var trackForReview by remember { mutableStateOf<YouTubeTrackResult?>(null) }
     var localSongForReview by remember { mutableStateOf<LocalSong?>(null) }
-    var activeSongReviews by remember { mutableStateOf<List<SongReviewEntity>>(emptyList()) }
+    var showMyReviews by remember { mutableStateOf(false) }
 
     var songToDelete by remember { mutableStateOf<LocalSong?>(null) }
 
@@ -167,6 +168,7 @@ fun HomeScreen(
     val localSongs by viewModel.localSongs.collectAsState()
     val isScanningLocal by viewModel.isScanningLocal.collectAsState()
     val playlists by viewModel.playlists.collectAsState()
+    val allReviews by viewModel.allReviews.collectAsState()
 
     val currentPreviewTrack by viewModel.currentPreviewTrack.collectAsState()
     val isPreviewPlaying by viewModel.isPreviewPlaying.collectAsState()
@@ -205,6 +207,7 @@ fun HomeScreen(
         localSongForReview = null
         isCreatePlaylistDialogVisible = false
         songToDelete = null
+        showMyReviews = false
     }
 
     // Navegación intuitiva con el botón Atrás del sistema (Android BackHandler)
@@ -218,6 +221,7 @@ fun HomeScreen(
                 localSongForPlaylist != null ||
                 trackForReview != null ||
                 localSongForReview != null ||
+                showMyReviews ||
                 isCreatePlaylistDialogVisible ||
                 searchQuery.isNotEmpty() ||
                 selectedTab != NavigationTab.HOME
@@ -236,6 +240,7 @@ fun HomeScreen(
                 trackForReview = null
                 localSongForReview = null
             }
+            showMyReviews -> showMyReviews = false
             isCreatePlaylistDialogVisible -> isCreatePlaylistDialogVisible = false
             searchQuery.isNotEmpty() -> viewModel.onSearchQueryChanged("")
             selectedTab != NavigationTab.HOME -> selectedTab = NavigationTab.HOME
@@ -548,6 +553,21 @@ fun HomeScreen(
                             viewModel.clearRecentHistory()
                         }
                     )
+                } else if (showMyReviews) {
+                    MyReviewsScreen(
+                        reviews = allReviews,
+                        onBack = { showMyReviews = false },
+                        onOpenSong = { summary ->
+                            trackForReview = YouTubeTrackResult(
+                                videoId = summary.songId,
+                                title = summary.songTitle,
+                                channelOrArtist = summary.artist,
+                                durationText = "",
+                                thumbnailUrl = ""
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
                 } else {
                     when (selectedTab) {
                         NavigationTab.HOME -> {
@@ -797,6 +817,34 @@ fun HomeScreen(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 22.sp
                                 )
+                                Spacer(modifier = Modifier.weight(1f))
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = AccentDim,
+                                    border = BorderStroke(1.dp, Accent),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { showMyReviews = true }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Star,
+                                            contentDescription = null,
+                                            tint = Color(0xFFFFB800),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Mis reseñas (${allReviews.size})",
+                                            color = TextPrimary,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
 
                             // Selector de Sub-Tab: Canciones vs Playlists
@@ -1304,6 +1352,9 @@ fun HomeScreen(
             val reviewTitle = trackForReview?.title ?: localSongForReview?.title ?: ""
             val reviewArtist = trackForReview?.channelOrArtist ?: localSongForReview?.artist ?: ""
             val reviewSongId = trackForReview?.videoId ?: localSongForReview?.id.toString()
+            val activeSongReviews by remember(reviewSongId) {
+                viewModel.getReviewsForSong(reviewSongId)
+            }.collectAsState(initial = emptyList())
 
             SongReviewDialog(
                 visible = trackForReview != null || localSongForReview != null,
@@ -1316,9 +1367,9 @@ fun HomeScreen(
                 },
                 onSubmitReview = { rating, comment ->
                     viewModel.addReview(reviewSongId, reviewTitle, reviewArtist, rating, comment)
-                    trackForReview = null
-                    localSongForReview = null
-                }
+                },
+                onUpdateReview = { id, rating, comment -> viewModel.updateReview(id, rating, comment) },
+                onDeleteReview = { id -> viewModel.deleteReview(id) }
             )
 
             // Diálogo de confirmación para borrar canción del celular
