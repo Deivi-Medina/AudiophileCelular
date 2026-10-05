@@ -265,7 +265,7 @@ fun HomeFeedSection(
                     }
 
                     // Fila 2+: Playlists personalizadas del usuario o atajos directos
-                    if (playlists.isEmpty()) {
+                    run {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -366,7 +366,8 @@ fun HomeFeedSection(
                                 }
                             }
                         }
-                    } else {
+                    }
+                    if (playlists.isNotEmpty()) {
                         // Playlists creadas por el usuario
                         val displayedPlaylists = playlists.take(6)
                         val rows = displayedPlaylists.chunked(2)
