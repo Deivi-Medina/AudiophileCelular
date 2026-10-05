@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ═══════════════════════════════════════════════════════════
+         PERMISOS DE RED (para búsqueda y descarga de YouTube)
+         ═══════════════════════════════════════════════════════════ -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- ═══════════════════════════════════════════════════════════
+         PERMISOS DE ALMACENAMIENTO / AUDIO
+         ═══════════════════════════════════════════════════════════ -->
+
+    <!-- Android 13+ (API 33+) - Permiso específico para audio -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+    <!-- Android 12 y menor (API 32-) - Permiso general de lectura -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- Android 9 y menor (API 28-) - Permiso de escritura -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"
+        tools:ignore="ScopedStorage" />
+
+    <!-- ═══════════════════════════════════════════════════════════
+         PERMISOS DE NOTIFICACIONES Y AUDIO
+         ═══════════════════════════════════════════════════════════ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <application
+        android:allowBackup="true"
+        android:usesCleartextTraffic="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MyApplication"
+        tools:targetApi="34">
+
+        <!-- ═══════════════════════════════════════════════════════
+             ACTIVIDAD PRINCIPAL
+             ═══════════════════════════════════════════════════════ -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.MyApplication"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ═══════════════════════════════════════════════════════
+             RECEIVER PARA NOTIFICACIÓN MULTIMEDIA
+             (Botones Play/Pausa/Siguiente/Anterior)
+             ═══════════════════════════════════════════════════════ -->
+        <receiver
+            android:name=".data.audio.MediaNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.audiophiles.ACTION_PLAY" />
+                <action android:name="com.example.audiophiles.ACTION_PAUSE" />
+                <action android:name="com.example.audiophiles.ACTION_NEXT" />
+                <action android:name="com.example.audiophiles.ACTION_PREV" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

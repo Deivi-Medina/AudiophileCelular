@@ -1,0 +1,6 @@
+{
+  "name": "Audiophile's",
+  "description": "Personal cosmic high-fidelity music player with YouTube exploration, preview player, glowing download queue, and local offline library.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
