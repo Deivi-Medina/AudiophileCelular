@@ -653,44 +653,26 @@ fun CosmicFullPlayerSheet(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Portada con efecto de halo y resplandor
-                val coverModel = remember(coverUrl) {
-                    when {
-                        coverUrl.isNullOrEmpty() -> null
-                        coverUrl.startsWith("file://") -> File(coverUrl.removePrefix("file://"))
-                        coverUrl.startsWith("/") -> File(coverUrl)
-                        else -> coverUrl
-                    }
-                }
-
                 Box(
                     modifier = Modifier
                         .size(260.dp)
                         .aspectRatio(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(coverModel)
-                            .crossfade(true)
-                            .build(),
-                        placeholder = painterResource(id = R.drawable.audiophiles_default_cover),
-                        error = painterResource(id = R.drawable.audiophiles_default_cover),
+                    // Fondo difuminado + portada principal. StableCoverArt mantiene
+                    // la portada anterior hasta que la nueva esté cargada, así al
+                    // cambiar de canción no se ve la portada predeterminada.
+                    StableCoverArt(
+                        coverUrl = coverUrl,
                         contentDescription = null,
-                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
                             .blur(28.dp)
                     )
 
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(coverModel)
-                            .crossfade(true)
-                            .build(),
-                        placeholder = painterResource(id = R.drawable.audiophiles_default_cover),
-                        error = painterResource(id = R.drawable.audiophiles_default_cover),
+                    StableCoverArt(
+                        coverUrl = coverUrl,
                         contentDescription = "Portada de $title",
-                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(RoundedCornerShape(24.dp))
