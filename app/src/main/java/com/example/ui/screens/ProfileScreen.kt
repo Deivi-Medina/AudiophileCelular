@@ -182,6 +182,7 @@ fun ProfileScreen(
                         onPick = { pickTarget = it },
                         onUnpinFavorite = { viewModel.unpinFavorite(it) },
                         onRemoveListenLater = { viewModel.removeFromListenLater(it) },
+                        onMarkListened = { viewModel.markListenLaterAsListened(it) },
                         // Las 5 favoritas viven en la pestaña 1: aquí no se duplican.
                         showPinnedFavorites = false
                     )

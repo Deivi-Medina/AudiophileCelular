@@ -1439,6 +1439,12 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
         else addToListenLater(song)
     }
 
+    /**
+     * Marcar como escuchada una canción de "Por escuchar": deja de estar pendiente y
+     * sale de la lista (es lo único que la lista guarda hoy).
+     */
+    fun markListenLaterAsListened(songId: String) = removeFromListenLater(songId)
+
     fun pinFavorite(position: Int, song: SongRef) {
         viewModelScope.launch { repository.pinFavorite(position, song) }
     }

@@ -764,6 +764,17 @@ fun HomeScreen(
                                             selectedQuality = quality,
                                             downloadState = downloadState,
                                             isPreviewPlaying = isCurrentPreview,
+                                            isInListenLater = listenLater.any { it.songId == track.videoId },
+                                            onToggleListenLater = {
+                                                viewModel.toggleListenLater(
+                                                    SongRef(
+                                                        songId = track.videoId,
+                                                        title = track.title,
+                                                        artist = track.channelOrArtist,
+                                                        coverUrl = track.thumbnailUrl
+                                                    )
+                                                )
+                                            },
                                             onQualitySelected = { q ->
                                                 viewModel.setQualityForTrack(track.videoId, q)
                                             },

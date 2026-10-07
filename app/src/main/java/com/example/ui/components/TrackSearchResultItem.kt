@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.BookmarkAdded
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -78,6 +80,9 @@ fun TrackSearchResultItem(
     isPreviewPlaying: Boolean,
     onPreviewToggle: () -> Unit,
     onDownloadClick: () -> Unit,
+    /** Guardar en "Por escuchar" desde los resultados de búsqueda (opcional). */
+    isInListenLater: Boolean = false,
+    onToggleListenLater: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var isQualityMenuOpen by remember { mutableStateOf(false) }
@@ -298,7 +303,31 @@ fun TrackSearchResultItem(
                 }
             }
 
-            // Cosmic Download Button a la derecha
+            // Guardar en "Por escuchar" (la lista que llena el dueño a mano) y
+            // Cosmic Download Button a la derecha.
+            if (onToggleListenLater != null) {
+                IconButton(
+                    onClick = onToggleListenLater,
+                    modifier = Modifier.testTag("listen_later_toggle_${track.videoId}")
+                ) {
+                    Icon(
+                        imageVector = if (isInListenLater) {
+                            Icons.Default.BookmarkAdded
+                        } else {
+                            Icons.Default.BookmarkBorder
+                        },
+                        contentDescription = if (isInListenLater) {
+                            "Quitar de Por escuchar"
+                        } else {
+                            "Añadir a Por escuchar"
+                        },
+                        tint = if (isInListenLater) GlowNeon else TextSecondary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+
             CosmicDownloadButton(
                 state = downloadState,
                 onClick = onDownloadClick
