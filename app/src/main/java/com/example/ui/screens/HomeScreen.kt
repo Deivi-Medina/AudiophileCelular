@@ -1187,6 +1187,7 @@ fun HomeScreen(
                 visible = isFullPlayerVisible,
                 title = fullPlayerTrackTitle,
                 artist = fullPlayerTrackArtist,
+                songId = currentPreviewTrack?.videoId ?: currentLocalSong?.id?.toString(),
                 coverUrl = fullPlayerCover,
                 isPlaying = fullPlayerIsPlaying,
                 progress = fullPlayerProgress,
