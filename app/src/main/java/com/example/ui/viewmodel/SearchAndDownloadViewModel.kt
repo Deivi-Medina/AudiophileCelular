@@ -21,6 +21,7 @@ import com.example.data.local.PlaylistSongEntity
 import com.example.data.local.RecentSongEntity
 import com.example.data.local.SongReviewEntity
 import com.example.data.local.UserProfile
+import com.example.data.local.XpSource
 import com.example.data.model.AudioQuality
 import com.example.data.model.DownloadState
 import com.example.data.model.LocalSong
@@ -404,6 +405,7 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
                 _isPreviewPlaying.value = false
                 previewProgressJob?.cancel()
                 mediaSessionManager.updatePlaybackState(playing = false, positionMs = 0)
+                awardXp(XpSource.FULL_LISTEN) // +2 XP por terminar la canción completa
                 handleTrackFinished()
             }
             mp.setOnErrorListener { _, what, extra ->
@@ -519,7 +521,8 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
                 }
 
                 _downloadStates.update { it + (track.videoId to DownloadState.Completed) }
-
+                // +10 XP por descarga terminada (una sola vez por canción)
+                if (rewardedDownloads.add(track.videoId)) awardXp(XpSource.DOWNLOAD)
                 _toastData.value = ToastData(
                     title = track.title,
                     quality = "${quality.bitrate} ${quality.format}",
@@ -655,6 +658,7 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
                     _isLocalPlaying.value = false
                     localProgressJob?.cancel()
                     mediaSessionManager.updatePlaybackState(playing = false, positionMs = 0)
+                    awardXp(XpSource.FULL_LISTEN) // +2 XP por terminar la canción completa
                     handleTrackFinished()
                 }
 
@@ -1339,7 +1343,10 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
     // ─── PLAYLISTS ──────────────────────────────────────────
 
     fun createPlaylist(name: String, description: String = "") {
-        viewModelScope.launch { repository.createPlaylist(name, description) }
+        viewModelScope.launch {
+            repository.createPlaylist(name, description)
+            awardXp(XpSource.CREATE_PLAYLIST) // +20 XP por playlist creada
+        }
     }
 
     fun deletePlaylist(playlist: PlaylistEntity) {
@@ -1394,7 +1401,10 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
     // ─── RESEÑAS ────────────────────────────────────────────
 
     fun addReview(songId: String, title: String, artist: String, rating: Float, comment: String, coverUrl: String? = null) {
-        viewModelScope.launch { repository.addSongReview(songId, title, artist, rating, comment, coverUrl) }
+        viewModelScope.launch {
+            repository.addSongReview(songId, title, artist, rating, comment, coverUrl)
+            awardXp(XpSource.REVIEW) // +15 XP por reseña escrita
+        }
     }
 
     fun getReviewsForSong(songId: String) = repository.getReviewsForSong(songId)
@@ -1474,6 +1484,31 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
     fun updateProfile(newProfile: UserProfile) {
         repository.getUserProfileManager().saveProfile(newProfile)
     }
+
+    // ─── PROGRESO / LOGROS ──────────────────────────────────
+    /** XP acumulada del perfil (persistida en las prefs del perfil). */
+    val xp: StateFlow<Int> = repository.getUserProfileManager().xp
+
+    /** Ids de logros desbloqueados (catalogo vacio hasta que el dueno traiga su lista). */
+    val unlockedAchievements: StateFlow<Set<String>> = repository.getUserProfileManager().unlockedAchievements
+
+    /**
+     * Seguidores / seguidos: todavia no hay backend. Firebase no esta conectado
+     * (falta `google-services.json`, lo aporta el dueno): se muestran 0 y no se inventan datos.
+     * TODO(Firebase): apuntar estos flows a los contadores reales de Firestore.
+     */
+    private val _followersCount = MutableStateFlow(0)
+    val followersCount: StateFlow<Int> = _followersCount.asStateFlow()
+    private val _followingCount = MutableStateFlow(0)
+    val followingCount: StateFlow<Int> = _followingCount.asStateFlow()
+
+    /** Unica puerta de entrada de XP: cada evento real de la app llama aqui. */
+    private fun awardXp(source: XpSource) {
+        repository.getUserProfileManager().awardXp(source)
+    }
+
+    /** Descargas ya premiadas, para no dar XP dos veces por la misma cancion. */
+    private val rewardedDownloads = mutableSetOf<String>()
 
     // ─── UTILIDADES ─────────────────────────────────────────
 
