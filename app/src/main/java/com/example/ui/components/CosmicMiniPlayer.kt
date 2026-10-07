@@ -120,24 +120,13 @@ fun CosmicMiniPlayer(
                             .background(Color(0xFF161626)),
                         contentAlignment = Alignment.Center
                     ) {
-                        val coverModel = remember(coverUrl) {
-                            when {
-                                coverUrl.isNullOrEmpty() -> null
-                                coverUrl.startsWith("file://") -> File(coverUrl.removePrefix("file://"))
-                                coverUrl.startsWith("/") -> File(coverUrl)
-                                else -> coverUrl
-                            }
-                        }
-                        if (coverModel != null) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(LocalContext.current)
-                                    .data(coverModel)
-                                    .crossfade(true)
-                                    .build(),
-                                placeholder = painterResource(id = R.drawable.audiophiles_default_cover),
-                                error = painterResource(id = R.drawable.audiophiles_default_cover),
+                        if (!coverUrl.isNullOrBlank()) {
+                            // StableCoverArt conserva la portada anterior mientras
+                            // carga la de la nueva canción (mismo comportamiento
+                            // que el reproductor completo).
+                            StableCoverArt(
+                                coverUrl = coverUrl,
                                 contentDescription = null,
-                                contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
                             )
                         } else {

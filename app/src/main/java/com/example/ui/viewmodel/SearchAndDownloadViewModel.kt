@@ -402,10 +402,9 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
             }
             mp.setOnCompletionListener {
                 _isPreviewPlaying.value = false
-                _previewProgress.value = 1f
                 previewProgressJob?.cancel()
                 mediaSessionManager.updatePlaybackState(playing = false, positionMs = 0)
-                playNext()
+                handleTrackFinished()
             }
             mp.setOnErrorListener { _, what, extra ->
                 Log.w(TAG, "Error en stream preview MediaPlayer ($what, $extra)")
@@ -654,10 +653,9 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
 
                 setOnCompletionListener {
                     _isLocalPlaying.value = false
-                    _localProgress.value = 1f
                     localProgressJob?.cancel()
                     mediaSessionManager.updatePlaybackState(playing = false, positionMs = 0)
-                    playNext()
+                    handleTrackFinished()
                 }
 
                 setOnErrorListener { _, what, extra ->
@@ -696,10 +694,9 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
                 }
                 setOnCompletionListener {
                     _isLocalPlaying.value = false
-                    _localProgress.value = 1f
                     localProgressJob?.cancel()
                     mediaSessionManager.updatePlaybackState(playing = false, positionMs = 0)
-                    playNext()
+                    handleTrackFinished()
                 }
                 prepareAsync()
             }
@@ -911,11 +908,124 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
             forward && _repeatMode.value == RepeatMode.ALL -> playQueueItemAt(0)
             !forward && _repeatMode.value == RepeatMode.ALL -> playQueueItemAt(q.items.lastIndex)
             else -> {
-                stopPreview()
-                stopLocalPlayback()
-                _playbackQueue.value = q.copy(currentIndex = -1)
+                // Borde de la lista sin loop: no se salta a otra canción ni se
+                // pierde la actual, queda pausada en 0:00 lista para reanudar.
+                pauseAtTrackStart()
             }
         }
+    }
+
+    /**
+     * Fin natural de una pista (el audio llegó al final; no es un salto manual).
+     *
+     * Con loop activo se repite la misma canción o se da la vuelta a la lista,
+     * y con canciones pendientes se pasa a la siguiente. Al terminar la última
+     * canción de la lista o de la cola **sin loop** no se salta a otra: la
+     * reproducción queda pausada en 0:00 sobre la misma canción, con su portada.
+     */
+    private fun handleTrackFinished() {
+        val queue = _playbackQueue.value
+        val preview = _currentPreviewTrack.value
+        val local = _currentLocalSong.value
+
+        // Loop de una sola canción: se repite desde el principio.
+        if (_repeatMode.value == RepeatMode.ONE) {
+            when {
+                queue.isActive -> playQueueItemAt(queue.currentIndex)
+                preview != null -> startPreview(preview)
+                local != null -> startLocalPlayback(local, seekPositionMs = 0)
+                else -> pauseAtTrackStart()
+            }
+            return
+        }
+
+        // Cola o playlist activa: avanzar mientras queden canciones.
+        if (queue.isActive) {
+            val next = queue.currentIndex + 1
+            if (next in queue.items.indices) {
+                playQueueItemAt(next)
+                return
+            }
+            if (_repeatMode.value == RepeatMode.ALL) {
+                playQueueItemAt(0)
+                return
+            }
+            // Última de la lista sin loop: se queda en la canción actual.
+            pauseAtTrackStart()
+            return
+        }
+
+        // Sin cola (Biblioteca / Explorar): avanzar dentro de la lista visible.
+        if (preview != null) {
+            val results = _searchResults.value
+            val i = results.indexOfFirst { it.videoId == preview.videoId }
+            if (i >= 0 && i + 1 in results.indices) {
+                togglePreview(results[i + 1])
+                return
+            }
+            if (_repeatMode.value == RepeatMode.ALL && results.isNotEmpty()) {
+                togglePreview(results[0])
+                return
+            }
+            pauseAtTrackStart()
+            return
+        }
+        if (local != null) {
+            val songs = _localSongs.value
+            val i = songs.indexOfFirst { it.id == local.id }
+            if (i >= 0 && i + 1 in songs.indices) {
+                playLocalSong(songs[i + 1])
+                return
+            }
+            if (_repeatMode.value == RepeatMode.ALL && songs.isNotEmpty()) {
+                playLocalSong(songs[0])
+                return
+            }
+            pauseAtTrackStart()
+            return
+        }
+        pauseAtTrackStart()
+    }
+
+    /**
+     * Deja la canción actual cargada y visible, pero pausada en 0:00.
+     *
+     * No libera el reproductor ni borra [_currentLocalSong] / [_currentPreviewTrack]
+     * a propósito: así el título y la portada siguen en el mini reproductor, en
+     * el reproductor completo y en la notificación, y el botón de play reanuda
+     * esa misma canción desde el principio.
+     */
+    private fun pauseAtTrackStart() {
+        val hasLocal = _currentLocalSong.value != null
+        val hasPreview = _currentPreviewTrack.value != null
+        localProgressJob?.cancel()
+        previewProgressJob?.cancel()
+        if (hasLocal) {
+            try {
+                localMediaPlayer?.let { mp ->
+                    if (mp.isPlaying) mp.pause()
+                    mp.seekTo(0)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "No se pudo rebobinar el reproductor local: ${e.message}")
+            }
+            _isLocalPlaying.value = false
+            _localProgress.value = 0f
+        }
+        if (hasPreview) {
+            try {
+                previewMediaPlayer?.let { mp ->
+                    if (mp.isPlaying) mp.pause()
+                    mp.seekTo(0)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "No se pudo rebobinar el preview: ${e.message}")
+            }
+            _isPreviewPlaying.value = false
+            _previewProgress.value = 0f
+        }
+        // La notificación se conserva en pausa con la canción actual.
+        mediaSessionManager.updatePlaybackState(playing = false, positionMs = 0)
     }
 
     fun playQueueItemAt(index: Int) {
