@@ -87,6 +87,8 @@ fun ReviewsJournalSection(
     onPick: (SongPickTarget) -> Unit,
     onUnpinFavorite: (Int) -> Unit,
     onRemoveListenLater: (String) -> Unit,
+    /** La pestaña 1 del Perfil ya muestra las 5 favoritas fijadas: en la pestaña 2 se ocultan para no duplicarlas. */
+    showPinnedFavorites: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
@@ -126,26 +128,27 @@ fun ReviewsJournalSection(
         }
 
         Spacer(modifier = Modifier.height(18.dp))
-        SectionLabel("MIS $PINNED_FAVORITES_COUNT FAVORITAS")
-        Spacer(modifier = Modifier.height(8.dp))
+        if (showPinnedFavorites) {
+            SectionLabel("MIS $PINNED_FAVORITES_COUNT FAVORITAS")
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (position in 0 until PINNED_FAVORITES_COUNT) {
-                val pinned = pinnedFavorites.firstOrNull { it.position == position }
-                FavoriteSlot(
-                    pinned = pinned,
-                    modifier = Modifier.weight(1f),
-                    onClick = {
-                        if (pinned == null) onPick(SongPickTarget.Favorite(position)) else onOpenSong(pinned.toSongRef())
-                    },
-                    onChange = { onPick(SongPickTarget.Favorite(position)) },
-                    onRemove = { onUnpinFavorite(position) }
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (position in 0 until PINNED_FAVORITES_COUNT) {
+                    val pinned = pinnedFavorites.firstOrNull { it.position == position }
+                    FavoriteSlot(
+                        pinned = pinned,
+                        modifier = Modifier.weight(1f),
+                        onClick = {
+                            if (pinned == null) onPick(SongPickTarget.Favorite(position)) else onOpenSong(pinned.toSongRef())
+                        },
+                        onChange = { onPick(SongPickTarget.Favorite(position)) },
+                        onRemove = { onUnpinFavorite(position) }
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.height(18.dp))
         }
-
-        Spacer(modifier = Modifier.height(18.dp))
-
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             JournalTab("Diario", selectedTab == 0) { selectedTab = 0 }
             JournalTab("Por escuchar (${listenLater.size})", selectedTab == 1) { selectedTab = 1 }

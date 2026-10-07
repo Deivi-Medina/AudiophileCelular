@@ -24,6 +24,39 @@ class UserProfileManager(context: Context) {
     private val _recentSearches = MutableStateFlow(loadRecentSearches())
     val recentSearches: StateFlow<List<String>> = _recentSearches.asStateFlow()
 
+    // ─── Progreso (XP / logros) ─────────────────────────────────────────────
+    // Se guarda en las mismas prefs del perfil para que sobreviva al reinicio.
+    private val _xp = MutableStateFlow(prefs.getInt(KEY_XP, 0))
+    val xp: StateFlow<Int> = _xp.asStateFlow()
+
+    private val _unlockedAchievements = MutableStateFlow(loadUnlockedAchievements())
+    val unlockedAchievements: StateFlow<Set<String>> = _unlockedAchievements.asStateFlow()
+
+    /** Suma la XP de un evento real de la app (ver [XpSource]). */
+    fun awardXp(source: XpSource): Int = addXp(source.xp)
+
+    /** Suma XP arbitraria (por ejemplo al desbloquear un logro). Devuelve el total. */
+    fun addXp(amount: Int): Int {
+        if (amount <= 0) return _xp.value
+        val total = _xp.value + amount
+        prefs.edit().putInt(KEY_XP, total).apply()
+        _xp.value = total
+        return total
+    }
+
+    /** Marca un logro como desbloqueado (idempotente). */
+    fun unlockAchievement(id: String) {
+        if (id.isBlank() || _unlockedAchievements.value.contains(id)) return
+        val updated = _unlockedAchievements.value + id
+        prefs.edit().putString(KEY_ACHIEVEMENTS, updated.joinToString("|||")).apply()
+        _unlockedAchievements.value = updated
+    }
+
+    private fun loadUnlockedAchievements(): Set<String> {
+        val raw = prefs.getString(KEY_ACHIEVEMENTS, null) ?: return emptySet()
+        return raw.split("|||").filter { it.isNotBlank() }.toSet()
+    }
+
     private fun loadProfile(): UserProfile {
         return UserProfile(
             username = prefs.getString("username", "Deivi Medina") ?: "Deivi Medina",
@@ -61,5 +94,10 @@ class UserProfileManager(context: Context) {
     private fun loadRecentSearches(): List<String> {
         val raw = prefs.getString("recent_searches", null) ?: return listOf("Queen", "Daft Punk", "Pink Floyd", "Canserbero", "Gorillaz")
         return raw.split("|||").filter { it.isNotBlank() }
+    }
+
+    private companion object {
+        const val KEY_XP = "profile_xp"
+        const val KEY_ACHIEVEMENTS = "profile_unlocked_achievements"
     }
 }
