@@ -76,6 +76,7 @@ import com.example.data.local.XpSource
 import com.example.data.model.SongRef
 import com.example.data.model.toSongRef
 import com.example.ui.components.CosmicMeshBackground
+import com.example.ui.components.RatingsChartSection
 import com.example.ui.components.ReviewsJournalSection
 import com.example.ui.components.SongCover
 import com.example.ui.components.SongPickTarget
@@ -103,8 +104,9 @@ private const val FAVORITE_SLOTS = 5
  *  - Cabecera FIJA arriba (avatar, nombre, bio y contadores): no se va con el scroll.
  *  - Barra horizontal de pestañas con iconos (como IG) para elegir qué ver.
  *  - Pestaña 1 "Favoritas": las 5 favoritas fijadas + nivel con XP real + logros.
- *  - Pestaña 2 "Reseñas": el diario musical que ya existía (ReviewsJournalSection).
- *    "Por escuchar" y la gráfica de notas llegan en la tarea siguiente.
+ *  - Pestaña 2 "Reseñas": el diario musical que ya existía (ReviewsJournalSection), la
+ *    lista "Por escuchar" (que llena el dueño a mano) y la gráfica de las notas que
+ *    más das (RatingsChartSection).
  */
 @Composable
 fun ProfileScreen(
@@ -170,6 +172,8 @@ fun ProfileScreen(
                         .padding(20.dp)
                         .testTag("profile_tab_reviews_content")
                 ) {
+                    // 1) El diario de reseñas que ya existía (aquí tampoco se repiten
+                    //    las 5 favoritas: viven en la pestaña 1).
                     ReviewsJournalSection(
                         reviews = allReviews,
                         listenLater = listenLater,
@@ -178,9 +182,17 @@ fun ProfileScreen(
                         onPick = { pickTarget = it },
                         onUnpinFavorite = { viewModel.unpinFavorite(it) },
                         onRemoveListenLater = { viewModel.removeFromListenLater(it) },
+                        onMarkListened = { viewModel.markListenLaterAsListened(it) },
                         // Las 5 favoritas viven en la pestaña 1: aquí no se duplican.
                         showPinnedFavorites = false
                     )
+
+                    Spacer(modifier = Modifier.height(22.dp))
+
+                    // 2) La gráfica de las notas que más das (con la ♪ a la izquierda).
+                    //    Sale de las reseñas reales guardadas en la base de datos.
+                    RatingsChartSection(reviews = allReviews)
+
                     Spacer(modifier = Modifier.height(30.dp))
                 }
             }

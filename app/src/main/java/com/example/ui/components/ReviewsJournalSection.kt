@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.RateReview
 import androidx.compose.material3.Card
@@ -43,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -87,6 +89,8 @@ fun ReviewsJournalSection(
     onPick: (SongPickTarget) -> Unit,
     onUnpinFavorite: (Int) -> Unit,
     onRemoveListenLater: (String) -> Unit,
+    /** Marcar como escuchada: la canción ya no está pendiente y sale de la lista. */
+    onMarkListened: (String) -> Unit = {},
     /** La pestaña 1 del Perfil ya muestra las 5 favoritas fijadas: en la pestaña 2 se ocultan para no duplicarlas. */
     showPinnedFavorites: Boolean = true,
     modifier: Modifier = Modifier
@@ -202,7 +206,8 @@ fun ReviewsJournalSection(
                 ListenLaterRow(
                     item = item,
                     onReview = { onOpenSong(item.toSongRef()) },
-                    onRemove = { onRemoveListenLater(item.songId) }
+                    onRemove = { onRemoveListenLater(item.songId) },
+                    onMarkListened = { onMarkListened(item.songId) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -362,7 +367,12 @@ private fun DiaryEntryRow(review: SongReviewEntity, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ListenLaterRow(item: ListenLaterEntity, onReview: () -> Unit, onRemove: () -> Unit) {
+private fun ListenLaterRow(
+    item: ListenLaterEntity,
+    onReview: () -> Unit,
+    onRemove: () -> Unit,
+    onMarkListened: () -> Unit = {}
+) {
     Card(
         onClick = onReview,
         colors = CardDefaults.cardColors(containerColor = BgCard),
@@ -376,6 +386,18 @@ private fun ListenLaterRow(item: ListenLaterEntity, onReview: () -> Unit, onRemo
             Column(modifier = Modifier.weight(1f)) {
                 Text(item.songTitle, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(item.artist, color = TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            // Marcar como escuchada: sale de la lista de pendientes.
+            IconButton(
+                onClick = onMarkListened,
+                modifier = Modifier.testTag("listen_later_done_${item.songId}")
+            ) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = "Ya la escuché",
+                    tint = Accent,
+                    modifier = Modifier.size(20.dp)
+                )
             }
             IconButton(onClick = onRemove) {
                 Icon(Icons.Default.Close, contentDescription = "Quitar de Por escuchar", tint = TextMuted, modifier = Modifier.size(18.dp))
