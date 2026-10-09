@@ -17,6 +17,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.launch
 import sh.calvin.reorderable.ReorderableItem
@@ -132,6 +134,8 @@ fun CosmicFullPlayerSheet(
     visible: Boolean,
     title: String,
     artist: String,
+    /** Id de la canción que suena: con él se piden las reseñas de otras personas. */
+    songId: String? = null,
     coverUrl: String?,
     isPlaying: Boolean,
     progress: Float,
@@ -167,6 +171,31 @@ fun CosmicFullPlayerSheet(
 
     val context = LocalContext.current
     val density = LocalDensity.current
+
+    // ── Menú del artista (menú del vinilo) ────────────────────────────────
+    // Se abre al subir la portada del reproductor maximizado.
+    var artistMenuOpen by remember { mutableStateOf(false) }
+    var coverPullPx by remember { mutableStateOf(0f) }
+    var coverTopInRoot by remember { mutableStateOf(0f) }
+    var sheetTopInRoot by remember { mutableStateOf(0f) }
+    var vinylStartY by remember { mutableStateOf(0f) }
+    // La portada acompaña al dedo al subirla y se levanta al abrirse el menú.
+    val coverLiftPx by animateFloatAsState(
+        targetValue = when {
+            artistMenuOpen -> with(density) { -80.dp.toPx() }
+            else -> -coverPullPx.coerceAtMost(with(density) { 72.dp.toPx() })
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioNoBouncy),
+        label = "coverLift"
+    )
+    // Al cerrar el reproductor, el menú del artista se cierra con él.
+    LaunchedEffect(visible) {
+        if (!visible) {
+            artistMenuOpen = false
+            coverPullPx = 0f
+        }
+    }
+
     var dominantColor by remember { mutableStateOf<Color?>(null) }
 
     LaunchedEffect(coverUrl) {
@@ -517,7 +546,11 @@ fun CosmicFullPlayerSheet(
                 .offset { IntOffset(0, swipeOffsetY.value.roundToInt()) }
                 .background(BgPrimary)
                 .background(ambientGradient)
-                .pointerInput(Unit) {
+                .onGloballyPositioned { sheetTopInRoot = it.boundsInRoot().top }
+                .pointerInput(artistMenuOpen) {
+                    // Con el menú del artista abierto, el arrastre hacia abajo lo
+                    // gestiona el menú (para cerrarse), no el reproductor.
+                    if (artistMenuOpen) return@pointerInput
                     val velocityTracker = VelocityTracker()
                     var totalDrag = 0f
                     detectVerticalDragGestures(
@@ -656,7 +689,23 @@ fun CosmicFullPlayerSheet(
                 Box(
                     modifier = Modifier
                         .size(260.dp)
-                        .aspectRatio(1f),
+                        .aspectRatio(1f)
+                        .onGloballyPositioned { coverTopInRoot = it.boundsInRoot().top }
+                        .graphicsLayer { translationY = coverLiftPx }
+                        // Zona del gesto: subir la portada abre el menú del vinilo.
+                        // Bajar por aquí no se consume, así el reproductor se sigue
+                        // cerrando como siempre.
+                        .coverPullUpGesture(
+                            triggerPx = with(density) { COVER_PULL_TRIGGER.toPx() },
+                            onPullProgress = { coverPullPx = it },
+                            onTriggered = {
+                                // Se guarda dónde está la portada para que el vinilo
+                                // nazca justo encima de ella.
+                                vinylStartY = coverTopInRoot - sheetTopInRoot
+                                coverPullPx = 0f
+                                artistMenuOpen = true
+                            }
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     // Fondo difuminado + portada principal. StableCoverArt mantiene
@@ -844,6 +893,17 @@ fun CosmicFullPlayerSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
             }
+
+            // Menú del artista: detrás de la animación de la portada → vinilo.
+            SongArtistMenuSheet(
+                visible = artistMenuOpen && visible,
+                songId = songId,
+                title = title,
+                artist = artist,
+                coverUrl = coverUrl,
+                vinylStartY = vinylStartY,
+                onDismissRequest = { artistMenuOpen = false }
+            )
         }
     }
 }
