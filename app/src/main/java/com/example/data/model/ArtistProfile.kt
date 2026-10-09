@@ -19,6 +19,20 @@ sealed interface ArtistProfileUiState {
         val description: String? = null
     ) : ArtistProfileUiState
 
-    /** La fuente externa existe pero no tiene ficha de este artista. */
-    data object Unavailable : ArtistProfileUiState
+    /**
+     * No hay foto ni descripción que enseñar. [reason] sirve para que la UI
+     * explique **qué** ha pasado en vez de un mensaje genérico.
+     */
+    data class Unavailable(val reason: Reason = Reason.NoProfile) : ArtistProfileUiState {
+        enum class Reason {
+            /** La fuente externa no tiene artículo de este artista. */
+            NoProfile,
+
+            /** La canción no trae nombre de artista, así que no hay nada que buscar. */
+            NoArtist,
+
+            /** No se pudo llegar a la fuente (sin conexión, timeout…). Es temporal. */
+            Offline
+        }
+    }
 }

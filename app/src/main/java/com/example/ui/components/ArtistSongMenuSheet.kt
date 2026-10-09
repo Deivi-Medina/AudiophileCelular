@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +66,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.data.artist.ArtistProfileProvider
 import com.example.data.model.ArtistProfileUiState
 import com.example.data.model.ratingStarsLabel
 import com.example.data.reviews.PublicSongReview
@@ -126,7 +128,6 @@ fun SongArtistMenuSheet(
     vinylStartY: Float,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
-    artistProfile: ArtistProfileUiState = ArtistProfileUiState.Loading,
     reviewsSource: SongReviewsSource = SongReviewsProvider.source
 ) {
     val progress = remember { Animatable(0f) }
@@ -134,6 +135,11 @@ fun SongArtistMenuSheet(
     var dismissDrag by remember { mutableStateOf(0f) }
     val density = LocalDensity.current
     val spin = rememberVinylSpin()
+
+    // La ficha del artista (foto + descripción) se pide **en segundo plano** en
+    // cuanto el menú se abre: la animación portada → vinilo no espera a la red,
+    // el estado de carga lo dibuja la propia cabecera.
+    val artistProfile = rememberArtistProfileState(artist = artist, open = visible)
 
     LaunchedEffect(visible) {
         if (visible) {
@@ -277,10 +283,11 @@ fun SongArtistMenuSheet(
 // ─────────────────────────── CABECERA DEL ARTISTA ───────────────────────────
 
 /**
- * Cabecera tipo perfil de creador: foto (o su hueco), nombre y descripción.
- * El nombre siempre está; la foto y la descripción llegan de fuera en la
- * segunda mitad, así que hoy se enseña un placeholder de carga sin inventar
- * ningún dato.
+ * Cabecera tipo perfil de creador: foto, nombre y descripción.
+ *
+ * El nombre siempre está (viene de la canción); la foto y la descripción llegan
+ * de la fuente externa (ver `data/artist`). Mientras se cargan se enseña el
+ * esqueleto, y si no hay ficha se explica el motivo sin inventar ningún dato.
  */
 @Composable
 private fun ArtistProfileHeader(artist: String, profile: ArtistProfileUiState) {
@@ -318,11 +325,6 @@ private fun ArtistProfileHeader(artist: String, profile: ArtistProfileUiState) {
                         )
                     }
                 }
-                ArtistProfileUiState.Unavailable -> Text(
-                    text = "Todavía no hay ficha de este artista.",
-                    color = TextMuted,
-                    fontSize = 12.sp
-                )
                 ArtistProfileUiState.Loading -> {
                     Text(
                         text = "Cargando ficha del artista…",
@@ -332,10 +334,26 @@ private fun ArtistProfileHeader(artist: String, profile: ArtistProfileUiState) {
                     SkeletonBar(modifier = Modifier.fillMaxWidth(0.92f))
                     SkeletonBar(modifier = Modifier.fillMaxWidth(0.62f))
                 }
+                is ArtistProfileUiState.Unavailable -> Text(
+                    text = unavailableMessage(profile.reason),
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
             }
         }
     }
 }
+
+/** Mensaje de la cabecera cuando no hay ficha que enseñar. */
+private fun unavailableMessage(reason: ArtistProfileUiState.Unavailable.Reason): String =
+    when (reason) {
+        ArtistProfileUiState.Unavailable.Reason.NoProfile ->
+            "Todavía no hay ficha de este artista."
+        ArtistProfileUiState.Unavailable.Reason.NoArtist ->
+            "Esta canción no indica el artista, así que no hay ficha que buscar."
+        ArtistProfileUiState.Unavailable.Reason.Offline ->
+            "No se pudo cargar la ficha del artista. Comprueba tu conexión."
+    }
 
 @Composable
 private fun ArtistAvatar(photoUrl: String?, isLoading: Boolean) {
@@ -567,6 +585,27 @@ private fun ReviewCard(review: PublicSongReview) {
 }
 
 // ──────────────────────────────── AYUDANTES ────────────────────────────────
+
+/**
+ * Pide la ficha del artista cuando el menú está abierto ([open]) y traduce el
+ * resultado a estado de UI.
+ *
+ * La petición vive en una corrutina: la apertura del menú y la animación del
+ * vinilo siguen a lo suyo. Al cerrar el menú la corrutina se cancela (y con ella
+ * la descarga, si aún estaba en marcha). Si el artista ya está cacheado, la
+ * respuesta es inmediata y sin salto de esqueleto.
+ */
+@Composable
+private fun rememberArtistProfileState(artist: String, open: Boolean): ArtistProfileUiState {
+    val context = LocalContext.current
+    val source = remember(context) { ArtistProfileProvider.of(context) }
+    var state by remember(artist) { mutableStateOf<ArtistProfileUiState>(ArtistProfileUiState.Loading) }
+    LaunchedEffect(artist, open, source) {
+        if (!open) return@LaunchedEffect
+        state = source.load(artist)
+    }
+    return state
+}
 
 @Composable
 private fun rememberSongReviewsState(songId: String?, source: SongReviewsSource): SongReviewsUiState {
