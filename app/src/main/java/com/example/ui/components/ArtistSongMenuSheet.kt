@@ -607,6 +607,7 @@ private fun rememberArtistProfileState(artist: String, open: Boolean): ArtistPro
     return state
 }
 
+@Composable
 private fun rememberSongReviewsState(songId: String?, source: SongReviewsSource): SongReviewsUiState {
     val flow = remember(songId, source) {
         if (songId.isNullOrBlank()) flowOf(emptyList<PublicSongReview>())
