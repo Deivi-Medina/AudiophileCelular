@@ -72,6 +72,14 @@ dependencies {
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
   implementation(libs.coil.compose)
+  // ─── Firebase ───────────────────────────────────────────────
+  // Dependencias listas (BoM 34.17.0 + Firestore + Auth). El plugin
+  // `com.google.gms.google-services` sigue SIN activar a propósito: exige
+  // `google-services.json` y sin él rompería la compilación.
+  // Se enciende en un solo paso: ver /home/team/shared/FIREBASE_ACTIVACION.md
+  implementation(platform(libs.firebase.bom))
+  implementation(libs.firebase.firestore)
+  implementation(libs.firebase.auth)
   implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.converter.moshi)
   implementation(libs.kotlinx.coroutines.android)
