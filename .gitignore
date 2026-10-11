@@ -16,3 +16,6 @@
 local.properties
 .env
 debug.keystore
+
+# Configuracion de Firebase del dueno: no se sube al repo (ver FIREBASE_ACTIVACION.md)
+app/google-services.json
