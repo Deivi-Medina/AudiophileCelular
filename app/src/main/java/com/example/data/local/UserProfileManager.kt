@@ -32,8 +32,40 @@ class UserProfileManager(context: Context) {
     private val _unlockedAchievements = MutableStateFlow(loadUnlockedAchievements())
     val unlockedAchievements: StateFlow<Set<String>> = _unlockedAchievements.asStateFlow()
 
-    /** Suma la XP de un evento real de la app (ver [XpSource]). */
-    fun awardXp(source: XpSource): Int = addXp(source.xp)
+    /**
+     * Cuántas veces ha ocurrido cada evento real de la app, persistido.
+     * Solo se usa para los contadores que no se pueden sacar de la base de datos
+     * (hoy: escuchas completas). Descargas, reseñas, playlists y favoritas se cuentan
+     * desde los datos reales del perfil.
+     */
+    private val _eventCounters = MutableStateFlow(loadEventCounters())
+    val eventCounters: StateFlow<Map<XpSource, Int>> = _eventCounters.asStateFlow()
+
+    /** Suma la XP de un evento real de la app (ver [XpSource]) y lo cuenta. */
+    fun awardXp(source: XpSource): Int {
+        recordEvent(source)
+        return addXp(source.xp)
+    }
+
+    /** Anota que [source] ha ocurrido una vez más. Devuelve el total de ese evento. */
+    fun recordEvent(source: XpSource): Int {
+        val updated = (_eventCounters.value[source] ?: 0) + 1
+        prefs.edit().putInt(counterKey(source), updated).apply()
+        _eventCounters.value = _eventCounters.value + (source to updated)
+        return updated
+    }
+
+    /**
+     * Desbloquea los logros del catálogo cuya meta ya se cumple con [counters]
+     * (contadores reales del perfil). Idempotente: lo ya desbloqueado no se toca,
+     * así que un logro conseguido no se pierde si el contador baja luego.
+     */
+    fun syncAchievements(counters: Map<AchievementMetric, Int>) {
+        AchievementsCatalog.reachedIds(counters).forEach { unlockAchievement(it) }
+    }
+
+    private fun loadEventCounters(): Map<XpSource, Int> =
+        XpSource.values().associateWith { prefs.getInt(counterKey(it), 0) }
 
     /** Suma XP arbitraria (por ejemplo al desbloquear un logro). Devuelve el total. */
     fun addXp(amount: Int): Int {
@@ -99,5 +131,8 @@ class UserProfileManager(context: Context) {
     private companion object {
         const val KEY_XP = "profile_xp"
         const val KEY_ACHIEVEMENTS = "profile_unlocked_achievements"
+
+        /** Clave de prefs del contador de un evento (una por [XpSource]). */
+        fun counterKey(source: XpSource) = "profile_event_count_${source.name}"
     }
 }
