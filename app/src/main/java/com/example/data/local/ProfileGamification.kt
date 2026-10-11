@@ -89,32 +89,156 @@ object LevelCurve {
 }
 
 /**
- * Logro desbloqueable. El desbloqueo se guarda por [id] en las prefs del perfil
- * (`UserProfileManager.unlockAchievement`), así que la lista se puede llenar más tarde
- * sin migrar nada.
+ * Contador real que decide si un logro se desbloquea. Cada valor sale de datos que la app
+ * ya tiene (no se inventa nada ni hace falta backend):
+ *
+ *  - [DOWNLOADS]        canciones descargadas que siguen en el teléfono
+ *  - [REVIEWS]          reseñas guardadas en la base de datos
+ *  - [PLAYLISTS]        playlists creadas
+ *  - [FULL_LISTENS]     canciones escuchadas hasta el final (contador persistido, se suma
+ *                       cada vez que suena el evento de escucha completa)
+ *  - [LEVEL]            nivel de XP alcanzado ([LevelCurve])
+ *  - [PINNED_FAVORITES] huecos de "Mis 5 favoritas" que el dueño ha fijado
+ */
+enum class AchievementMetric {
+    DOWNLOADS,
+    REVIEWS,
+    PLAYLISTS,
+    FULL_LISTENS,
+    LEVEL,
+    PINNED_FAVORITES
+}
+
+/**
+ * Logro desbloqueable. [metric] + [goal] son la condición real: el logro se desbloquea
+ * cuando el contador de [metric] llega a [goal] (y una vez desbloqueado no se pierde,
+ * porque el desbloqueo se guarda por [id] en las prefs del perfil:
+ * `UserProfileManager.unlockAchievement`).
  */
 data class Achievement(
     val id: String,
     val title: String,
     val description: String,
-    val emoji: String = "🏆"
+    val emoji: String = "🏆",
+    val metric: AchievementMetric = AchievementMetric.DOWNLOADS,
+    val goal: Int = 1
 )
 
 object AchievementsCatalog {
     /**
-     * ─────────────────────────────────────────────────────────────
-     *  PUNTO ÚNICO PARA AÑADIR LOGROS
-     *  El dueño todavía no ha pasado su lista: hoy está vacía a propósito.
-     *  Cuando la traiga, añadir aquí cada logro, por ejemplo:
+     * ═══════════════════════════════════════════════════════════════════════
+     *  PUNTO ÚNICO PARA AÑADIR/CAMBIAR LOGROS
      *
-     *    Achievement("first_download", "Primera descarga", "Bajaste tu primera canción"),
-     *    Achievement("ten_reviews", "Crítico", "Escribiste 10 reseñas", "✍️"),
+     *  ⚠️ PROPUESTA DEL EQUIPO (Faro Labs): es una lista base para que la sección
+     *  funcione de verdad mientras el dueño no ha pasado la suya. Cuando llegue su
+     *  lista, se sustituye AQUÍ y en ningún otro sitio: la app no guarda títulos,
+     *  descripciones ni metas, solo los `id` ya desbloqueados en las prefs.
      *
-     *  y desbloquearlo desde la lógica correspondiente con
-     *  `userProfileManager.unlockAchievement("first_download")`.
-     *  La UI de la pestaña 1 (Perfil) ya pinta la lista con candado/desbloqueado:
-     *  no hay que tocar la pantalla.
-     * ─────────────────────────────────────────────────────────────
+     *  Reglas al editar:
+     *   1. `id` nuevo y estable (si se cambia un `id`, ese logro vuelve a salir con candado).
+     *   2. `metric` + `goal` deben poder medirse con datos que la app ya tiene
+     *      (ver [AchievementMetric]); no hay backend ni Firebase todavía.
+     *   3. La UI de la pestaña 1 (Perfil) pinta la lista, el candado y el progreso
+     *      "3/5" sola: no hay que tocar la pantalla.
+     * ═══════════════════════════════════════════════════════════════════════
      */
-    val all: List<Achievement> = emptyList()
+    val all: List<Achievement> = listOf(
+        // ── Descargas ────────────────────────────────────────────────────────
+        Achievement(
+            id = "first_download",
+            title = "Primera descarga",
+            description = "Descargaste tu primera canción",
+            emoji = "⬇️",
+            metric = AchievementMetric.DOWNLOADS,
+            goal = 1
+        ),
+        Achievement(
+            id = "downloads_5",
+            title = "Coleccionista",
+            description = "5 canciones descargadas",
+            emoji = "📥",
+            metric = AchievementMetric.DOWNLOADS,
+            goal = 5
+        ),
+        Achievement(
+            id = "downloads_25",
+            title = "Biblioteca Hi-Fi",
+            description = "25 canciones descargadas",
+            emoji = "💾",
+            metric = AchievementMetric.DOWNLOADS,
+            goal = 25
+        ),
+
+        // ── Reseñas ──────────────────────────────────────────────────────────
+        Achievement(
+            id = "first_review",
+            title = "Primera reseña",
+            description = "Escribiste tu primera reseña",
+            emoji = "✍️",
+            metric = AchievementMetric.REVIEWS,
+            goal = 1
+        ),
+        Achievement(
+            id = "reviews_10",
+            title = "Crítico musical",
+            description = "10 canciones reseñadas",
+            emoji = "📝",
+            metric = AchievementMetric.REVIEWS,
+            goal = 10
+        ),
+
+        // ── Playlists ────────────────────────────────────────────────────────
+        Achievement(
+            id = "first_playlist",
+            title = "Primera playlist",
+            description = "Creaste tu primera playlist",
+            emoji = "🎼",
+            metric = AchievementMetric.PLAYLISTS,
+            goal = 1
+        ),
+        Achievement(
+            id = "playlists_5",
+            title = "Curador",
+            description = "5 playlists creadas",
+            emoji = "🎧",
+            metric = AchievementMetric.PLAYLISTS,
+            goal = 5
+        ),
+
+        // ── Escuchas ─────────────────────────────────────────────────────────
+        Achievement(
+            id = "listens_100",
+            title = "Cien escuchas",
+            description = "100 canciones escuchadas completas",
+            emoji = "🔊",
+            metric = AchievementMetric.FULL_LISTENS,
+            goal = 100
+        ),
+
+        // ── Nivel y favoritas ────────────────────────────────────────────────
+        Achievement(
+            id = "level_5",
+            title = "Audiófilo",
+            description = "Alcanzaste el nivel 5",
+            emoji = "⭐",
+            metric = AchievementMetric.LEVEL,
+            goal = 5
+        ),
+        Achievement(
+            id = "pinned_5",
+            title = "Escaparate completo",
+            description = "Fijaste tus 5 favoritas",
+            emoji = "📌",
+            metric = AchievementMetric.PINNED_FAVORITES,
+            goal = 5
+        )
+    )
+
+    /** Cuántos logros del catálogo ya cumplen su meta con [counters]. */
+    fun reachedIds(counters: Map<AchievementMetric, Int>): List<String> =
+        all.filter { (counters[it.metric] ?: 0) >= it.goal }.map { it.id }
+
+    /** Valor actual del contador de un logro (0 si todavía no se ha medido). */
+    fun progressOf(achievement: Achievement, counters: Map<AchievementMetric, Int>): Int =
+        counters[achievement.metric] ?: 0
 }

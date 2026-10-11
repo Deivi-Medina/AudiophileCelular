@@ -14,7 +14,9 @@ import com.example.data.audio.AudioEffectEngine
 import com.example.data.audio.AudioSynthesizer
 import com.example.data.audio.AudiophilesMediaSessionManager
 import com.example.data.audio.EqualizerState
+import com.example.data.local.AchievementMetric
 import com.example.data.local.FavoriteSongEntity
+import com.example.data.local.LevelCurve
 import com.example.data.local.LocalMusicScanner
 import com.example.data.local.PlaylistEntity
 import com.example.data.local.PlaylistSongEntity
@@ -38,6 +40,7 @@ import java.io.FileOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -1507,6 +1510,44 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
     val followersCount: StateFlow<Int> = _followersCount.asStateFlow()
     private val _followingCount = MutableStateFlow(0)
     val followingCount: StateFlow<Int> = _followingCount.asStateFlow()
+
+    /**
+     * Contadores reales de la pestana 1. Son la CONDICION de los logros (ver
+     * [AchievementMetric]) y lo que pinta el progreso "3/5": todo sale de datos que la
+     * app ya tiene (canciones descargadas, reseñas guardadas, playlists, favoritas
+     * fijadas, nivel de XP y escuchas completas contadas por el perfil).
+     */
+    private val achievementBaseCounters: Flow<Map<AchievementMetric, Int>> = combine(
+        localSongs, playlists, allReviews, pinnedFavorites
+    ) { songs, playlistList, reviews, pinned ->
+        mapOf(
+            AchievementMetric.DOWNLOADS to songs.count { it.isDownloadedFromAudiophiles },
+            AchievementMetric.PLAYLISTS to playlistList.size,
+            AchievementMetric.REVIEWS to reviews.size,
+            AchievementMetric.PINNED_FAVORITES to pinned.size
+        )
+    }
+
+    /** Contadores medidos, listos para pintar progreso y desbloquear logros. */
+    val achievementCounters: StateFlow<Map<AchievementMetric, Int>> = combine(
+        achievementBaseCounters, xp, repository.getUserProfileManager().eventCounters
+    ) { base, xpValue, events ->
+        base + mapOf(
+            AchievementMetric.LEVEL to LevelCurve.levelForXp(xpValue),
+            AchievementMetric.FULL_LISTENS to (events[XpSource.FULL_LISTEN] ?: 0)
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    init {
+        // El logro se desbloquea solo cuando su contador real llega a la meta, aunque el
+        // dueno no abra el perfil. El catalogo (ids, metas) vive en AchievementsCatalog y
+        // el desbloqueo queda persistido en las prefs del perfil.
+        viewModelScope.launch {
+            achievementCounters.collect { counters ->
+                repository.getUserProfileManager().syncAchievements(counters)
+            }
+        }
+    }
 
     /** Unica puerta de entrada de XP: cada evento real de la app llama aqui. */
     private fun awardXp(source: XpSource) {

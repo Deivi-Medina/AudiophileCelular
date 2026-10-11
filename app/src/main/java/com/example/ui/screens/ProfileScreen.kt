@@ -69,6 +69,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.Achievement
+import com.example.data.local.AchievementMetric
 import com.example.data.local.AchievementsCatalog
 import com.example.data.local.LevelCurve
 import com.example.data.local.PinnedFavoriteEntity
@@ -127,6 +128,8 @@ fun ProfileScreen(
     // Progreso real, persistido en las prefs del perfil
     val xp by viewModel.xp.collectAsState()
     val unlockedAchievements by viewModel.unlockedAchievements.collectAsState()
+    // Contadores reales (progreso de los logros: "3/5")
+    val achievementCounters by viewModel.achievementCounters.collectAsState()
     // Contadores sociales: 0 hasta que el dueño conecte Firebase
     val followersCount by viewModel.followersCount.collectAsState()
     val followingCount by viewModel.followingCount.collectAsState()
@@ -160,6 +163,7 @@ fun ProfileScreen(
                 0 -> FavoritesLevelTab(
                     xp = xp,
                     unlockedAchievements = unlockedAchievements,
+                    achievementCounters = achievementCounters,
                     pinnedFavorites = pinnedFavorites,
                     onPick = { pickTarget = it },
                     onOpenSong = onOpenSongReviews,
@@ -479,6 +483,7 @@ private fun ProfileTab(
 private fun FavoritesLevelTab(
     xp: Int,
     unlockedAchievements: Set<String>,
+    achievementCounters: Map<AchievementMetric, Int>,
     pinnedFavorites: List<PinnedFavoriteEntity>,
     onPick: (SongPickTarget) -> Unit,
     onOpenSong: (SongRef) -> Unit,
@@ -525,7 +530,10 @@ private fun FavoritesLevelTab(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Logros
-        AchievementsSection(unlockedAchievements = unlockedAchievements)
+        AchievementsSection(
+            unlockedAchievements = unlockedAchievements,
+            counters = achievementCounters
+        )
 
         Spacer(modifier = Modifier.height(30.dp))
     }
@@ -724,7 +732,10 @@ private fun LevelCard(xp: Int) {
 // ───────────────────────────── LOGROS ─────────────────────────────
 
 @Composable
-private fun AchievementsSection(unlockedAchievements: Set<String>) {
+private fun AchievementsSection(
+    unlockedAchievements: Set<String>,
+    counters: Map<AchievementMetric, Int>
+) {
     val catalog = AchievementsCatalog.all
     val unlockedCount = remember(catalog, unlockedAchievements) {
         catalog.count { unlockedAchievements.contains(it.id) }
@@ -748,8 +759,9 @@ private fun AchievementsSection(unlockedAchievements: Set<String>) {
         Spacer(modifier = Modifier.height(8.dp))
 
         if (catalog.isEmpty()) {
-            // El dueño todavía no ha traído la lista de logros: se muestra un estado
-            // limpio (nunca un hueco vacío raro). Se llenan en AchievementsCatalog.all.
+            // Con el catálogo propuesto por el equipo esta rama ya no se pinta; se deja
+            // como red de seguridad por si algún día el catálogo vuelve a quedar vacío
+            // (nunca un hueco vacío raro). Los logros se llenan en AchievementsCatalog.all.
             Card(
                 colors = CardDefaults.cardColors(containerColor = BgSecondary),
                 border = BorderStroke(1.dp, GlassBorder),
@@ -797,7 +809,8 @@ private fun AchievementsSection(unlockedAchievements: Set<String>) {
             catalog.forEach { achievement ->
                 AchievementRow(
                     achievement = achievement,
-                    unlocked = unlockedAchievements.contains(achievement.id)
+                    unlocked = unlockedAchievements.contains(achievement.id),
+                    current = AchievementsCatalog.progressOf(achievement, counters)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -806,7 +819,7 @@ private fun AchievementsSection(unlockedAchievements: Set<String>) {
 }
 
 @Composable
-private fun AchievementRow(achievement: Achievement, unlocked: Boolean) {
+private fun AchievementRow(achievement: Achievement, unlocked: Boolean, current: Int) {
     Card(
         colors = CardDefaults.cardColors(containerColor = if (unlocked) BgSecondary else BgCard),
         border = BorderStroke(1.dp, if (unlocked) HoverBorder else GlassBorder),
@@ -858,6 +871,15 @@ private fun AchievementRow(achievement: Achievement, unlocked: Boolean) {
                     contentDescription = null,
                     tint = Accent,
                     modifier = Modifier.size(18.dp)
+                )
+            } else {
+                // Progreso real hacia la meta (ej. "3/5"), para que se vea que avanza.
+                Text(
+                    text = "${current.coerceAtMost(achievement.goal)}/${achievement.goal}",
+                    color = TextMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.testTag("achievement_progress_${achievement.id}")
                 )
             }
         }
