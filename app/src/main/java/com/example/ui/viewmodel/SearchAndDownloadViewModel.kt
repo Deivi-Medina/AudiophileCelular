@@ -34,6 +34,7 @@ import com.example.data.model.YouTubeTrackResult
 import com.example.data.model.toQueueItem
 import com.example.data.network.YouTubeAudioEngine
 import com.example.data.repository.MusicRepository
+import com.example.data.social.FollowCountersProvider
 import com.example.ui.components.ToastData
 import java.io.File
 import java.io.FileOutputStream
@@ -1502,14 +1503,19 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
     val unlockedAchievements: StateFlow<Set<String>> = repository.getUserProfileManager().unlockedAchievements
 
     /**
-     * Seguidores / seguidos: todavia no hay backend. Firebase no esta conectado
-     * (falta `google-services.json`, lo aporta el dueno): se muestran 0 y no se inventan datos.
-     * TODO(Firebase): apuntar estos flows a los contadores reales de Firestore.
+     * Seguidores / seguidos reales desde [FollowCountersProvider].
+     *
+     * - Sin `google-services.json` (Firebase no inicializado) el provider es
+     *   [com.example.data.social.FollowCountersSource.NONE]: 0 y 0, como hoy, sin
+     *   tocar la red y sin inventar datos.
+     * - Con Firebase conectado, `FirebaseBootstrap` cambia el provider a la fuente
+     *   de Firestore (`users/{uid}`) y estos flows empiezan a leer de ahi; si no hay
+     *   sesion iniciada o el documento no existe, siguen devolviendo 0.
      */
-    private val _followersCount = MutableStateFlow(0)
-    val followersCount: StateFlow<Int> = _followersCount.asStateFlow()
-    private val _followingCount = MutableStateFlow(0)
-    val followingCount: StateFlow<Int> = _followingCount.asStateFlow()
+    val followersCount: StateFlow<Int> = FollowCountersProvider.source.observeFollowersCount()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val followingCount: StateFlow<Int> = FollowCountersProvider.source.observeFollowingCount()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     /**
      * Contadores reales de la pestana 1. Son la CONDICION de los logros (ver
