@@ -1,0 +1,176 @@
+name: Android release APK
+
+# Construye un APK de release FIRMADO con una clave ESTABLE y lo adjunta a un
+# GitHub Release, para que el dueno pueda instalarlo y actualizarlo desde el
+# navegador del movil, sin Android Studio y sin cable.
+#
+# No toca la logica de la app ni el workflow `android-compile.yml`.
+# Detalles de firma e instalacion: COMO_INSTALAR.md y .signing/README.md
+
+on:
+  # Publicar: empujar un tag v* (ej. v1.0). Crea/actualiza el Release con el APK.
+  push:
+    tags:
+      - 'v*'
+  # Boton manual en Actions -> "Android release APK" -> Run workflow.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Nombre del tag/Release (vacio = v1.0-build<numero de ejecucion>)'
+        required: false
+        default: ''
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+# contents: write es imprescindible: crea el tag/Release y sube el asset.
+permissions:
+  contents: write
+
+env:
+  # Huella SHA-256 del certificado con el que se firma. Si el APK no sale
+  # firmado con esta clave, el workflow falla (asi la firma estable se
+  # comprueba sola en cada build, no se da por supuesta).
+  EXPECTED_CERT_SHA256: '4931b7007791e24cd9771a20d088ca4eed84316d7321253a4224c3189a605150'
+
+jobs:
+  release-apk:
+    name: assembleRelease firmado + Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Misma configuracion de JDK/SDK que android-compile.yml
+      - name: Set up JDK 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle (con cache)
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Asegurar permisos del wrapper
+        run: chmod +x ./gradlew
+
+      - name: Preparar clave de firma estable
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS_SECRET: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${KEYSTORE_B64:-}" ]; then
+            # Preferente: keystore guardado como secreto del repo (base64).
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/audiophile-release.p12"
+            KEYSTORE_FILE="$RUNNER_TEMP/audiophile-release.p12"
+            KEYSTORE_PASS="${KEYSTORE_PASS_SECRET:?Falta el secreto ANDROID_KEYSTORE_PASSWORD}"
+            echo "::notice::Firma con el keystore del secreto ANDROID_KEYSTORE_BASE64."
+          else
+            # Alternativa mientras el token del equipo no pueda crear secretos:
+            # keystore versionado en el repo. Ver .signing/README.md
+            KEYSTORE_FILE="$GITHUB_WORKSPACE/.signing/audiophile-release.p12"
+            KEYSTORE_PASS="audiophile-release"
+            echo "::notice::Firma con el keystore versionado en .signing/ (ver .signing/README.md)."
+          fi
+          test -f "$KEYSTORE_FILE"
+          {
+            echo "KEYSTORE_FILE=$KEYSTORE_FILE"
+            echo "KEYSTORE_PASS=$KEYSTORE_PASS"
+            echo "KEY_ALIAS=audiophile"
+          } >> "$GITHUB_ENV"
+
+      # La firma se inyecta por linea de comandos (-Pandroid.injected.signing.*):
+      # asi no hace falta editar app/build.gradle.kts ni el codigo de la app.
+      - name: assembleRelease (firmado)
+        run: |
+          set -euo pipefail
+          ./gradlew assembleRelease --no-daemon --stacktrace \
+            -Pandroid.injected.signing.store.file="$KEYSTORE_FILE" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASS" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEYSTORE_PASS"
+
+      - name: Comprobar la firma y preparar el asset
+        id: apk
+        run: |
+          set -euo pipefail
+          APK_IN=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG_NAME="${GITHUB_REF_NAME}"
+          else
+            TAG_NAME="${{ inputs.version }}"
+            TAG_NAME="${TAG_NAME:-v1.0-build${GITHUB_RUN_NUMBER}}"
+          fi
+          VERSION_NAME=$(grep -m1 'versionName' app/build.gradle.kts | sed 's/.*versionName *= *"\(.*\)".*/\1/')
+          VERSION_CODE=$(grep -m1 'versionCode' app/build.gradle.kts | sed 's/.*versionCode *= *\([0-9]*\).*/\1/')
+          ASSET="AudiophileCelular-${TAG_NAME}.apk"
+          mkdir -p dist
+          cp "$APK_IN" "dist/$ASSET"
+
+          # apksigner viene en el SDK Android que ya trae el runner.
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "dist/$ASSET" | tee "$RUNNER_TEMP/firma.txt"
+          GOT=$(grep -i 'certificate SHA-256 digest' "$RUNNER_TEMP/firma.txt" | head -1 | awk '{print $NF}' | tr -d ':' | tr 'A-Z' 'a-z')
+          echo "Huella SHA-256 del certificado: $GOT"
+          if [ "$GOT" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::El APK NO esta firmado con la clave estable esperada ($EXPECTED_CERT_SHA256)."
+            exit 1
+          fi
+          echo "::notice::Firma estable confirmada (misma clave que en releases anteriores)."
+          {
+            echo "asset=$ASSET"
+            echo "tag=$TAG_NAME"
+            echo "version_name=$VERSION_NAME"
+            echo "version_code=$VERSION_CODE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Apuntes del Release
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/notas.md" <<EOF
+          **APK instalable** de Audiophile Celular (fuera de Google Play).
+
+          - Version: ${{ steps.apk.outputs.version_name }} (versionCode ${{ steps.apk.outputs.version_code }})
+          - Fichero: \`${{ steps.apk.outputs.asset }}\`
+          - Firma: clave estable del proyecto, SHA-256 del certificado
+            \`$EXPECTED_CERT_SHA256\`
+
+          Instalar y actualizar encima sin perder datos (XP, logros, resenas locales):
+          descarga el \`.apk\` en el movil y abrelo. Paso a paso en
+          [COMO_INSTALAR.md](../blob/${{ github.sha }}/COMO_INSTALAR.md).
+
+          Es un APK fuera de Play: Android avisa de "origen desconocido" y Play
+          Protect puede pedir confirmacion. No hay actualizaciones automaticas.
+          EOF
+          cat "$RUNNER_TEMP/notas.md"
+
+      - name: Publicar el APK como Release
+        if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.apk.outputs.tag }}"
+          ASSET="dist/${{ steps.apk.outputs.asset }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "El Release $TAG ya existe: se reemplaza el APK con --clobber."
+            gh release upload "$TAG" "$ASSET" --clobber
+          else
+            gh release create "$TAG" "$ASSET" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG — Audiophile Celular" \
+              --notes-file "$RUNNER_TEMP/notas.md"
+          fi
+          gh release view "$TAG" --json url,assets
+
+      # Respaldo: el APK queda tambien como artefacto del run.
+      - name: Subir el APK como artefacto
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-release-firmado
+          path: dist/*.apk
+          if-no-files-found: ignore
+          retention-days: 14
