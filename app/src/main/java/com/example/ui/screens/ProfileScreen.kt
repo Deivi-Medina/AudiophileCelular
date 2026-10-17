@@ -614,6 +614,9 @@ private fun LevelCard(xp: Int) {
     val progress = LevelCurve.levelProgress(xp)
     val xpIntoLevel = LevelCurve.xpIntoLevel(xp)
     val xpForNext = LevelCurve.xpForNextLevel(level)
+    val isMaxLevel = LevelCurve.isMaxLevel(level)
+    val nextTitleLevel = LevelCurve.nextTitleLevel(level)
+    val nextTitle = LevelCurve.nextTitle(level)
 
     Card(
         colors = CardDefaults.cardColors(containerColor = BgSecondary),
@@ -681,7 +684,8 @@ private fun LevelCard(xp: Int) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "$xpIntoLevel / $xpForNext XP para el nivel ${level + 1}",
+                    text = if (isMaxLevel) "Nivel máximo de la escala"
+                    else "$xpIntoLevel / $xpForNext XP para el nivel ${level + 1}",
                     color = TextMuted,
                     fontSize = 11.sp
                 )
@@ -692,6 +696,21 @@ private fun LevelCard(xp: Int) {
                     fontWeight = FontWeight.Bold
                 )
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // El siguiente título es la meta a medio plazo: se ve siempre, sin abrir nada.
+            Text(
+                text = if (nextTitle != null && nextTitleLevel != null) {
+                    "Siguiente título: $nextTitle · nivel $nextTitleLevel"
+                } else {
+                    "Título máximo conseguido: ${LevelCurve.titleForLevel(level)}"
+                },
+                color = TextSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.testTag("profile_next_title")
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 

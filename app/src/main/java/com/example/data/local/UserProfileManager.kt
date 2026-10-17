@@ -41,10 +41,48 @@ class UserProfileManager(context: Context) {
     private val _eventCounters = MutableStateFlow(loadEventCounters())
     val eventCounters: StateFlow<Map<XpSource, Int>> = _eventCounters.asStateFlow()
 
+    /**
+     * Racha de días seguidos escuchando al menos una canción completa.
+     *
+     * La métrica vive aquí (y no en el ViewModel) porque necesita persistir entre
+     * reinicios: dos enteros y un día en las prefs, sin red ni base de datos. El día se
+     * cuenta en UTC (`millis / 86.400.000`) para no depender de la zona horaria del
+     * teléfono: el día cambia a las 00:00 UTC, no a medianoche local.
+     */
+    private val _currentStreak = MutableStateFlow(prefs.getInt(KEY_STREAK_CURRENT, 0))
+    val currentStreak: StateFlow<Int> = _currentStreak.asStateFlow()
+
+    /** Mejor racha histórica: es la que usan los logros, así no baja al fallar un día. */
+    private val _bestStreak = MutableStateFlow(prefs.getInt(KEY_STREAK_BEST, 0))
+    val bestStreak: StateFlow<Int> = _bestStreak.asStateFlow()
+
     /** Suma la XP de un evento real de la app (ver [XpSource]) y lo cuenta. */
     fun awardXp(source: XpSource): Int {
         recordEvent(source)
+        if (source == XpSource.FULL_LISTEN) registerListeningDay()
         return addXp(source.xp)
+    }
+
+    /**
+     * Anota que hoy se ha escuchado una canción completa y devuelve la racha actual.
+     * Idempotente dentro del mismo día. Si el día anterior también contó, suma 1; si
+     * hubo un hueco, la racha vuelve a 1 (la mejor racha nunca baja).
+     */
+    fun registerListeningDay(nowMillis: Long = System.currentTimeMillis()): Int {
+        val today = nowMillis / DAY_MILLIS
+        val lastDay = prefs.getLong(KEY_STREAK_LAST_DAY, NO_DAY)
+        if (today == lastDay) return _currentStreak.value
+
+        val current = if (lastDay != NO_DAY && today - lastDay == 1L) _currentStreak.value + 1 else 1
+        val best = maxOf(current, _bestStreak.value)
+        prefs.edit()
+            .putLong(KEY_STREAK_LAST_DAY, today)
+            .putInt(KEY_STREAK_CURRENT, current)
+            .putInt(KEY_STREAK_BEST, best)
+            .apply()
+        _currentStreak.value = current
+        _bestStreak.value = best
+        return current
     }
 
     /** Anota que [source] ha ocurrido una vez más. Devuelve el total de ese evento. */
@@ -84,9 +122,19 @@ class UserProfileManager(context: Context) {
         _unlockedAchievements.value = updated
     }
 
+    /**
+     * Lee los logros guardados y aplica, si hace falta, la migración al catálogo nuevo
+     * ([AchievementsCatalog.migrateLegacyUnlocks]). Es idempotente: con los ids ya
+     * migrados no reescribe nada.
+     */
     private fun loadUnlockedAchievements(): Set<String> {
         val raw = prefs.getString(KEY_ACHIEVEMENTS, null) ?: return emptySet()
-        return raw.split("|||").filter { it.isNotBlank() }.toSet()
+        val stored = raw.split("|||").filter { it.isNotBlank() }.toSet()
+        val migrated = AchievementsCatalog.migrateLegacyUnlocks(stored)
+        if (migrated != stored) {
+            prefs.edit().putString(KEY_ACHIEVEMENTS, migrated.joinToString("|||")).apply()
+        }
+        return migrated
     }
 
     private fun loadProfile(): UserProfile {
@@ -131,6 +179,13 @@ class UserProfileManager(context: Context) {
     private companion object {
         const val KEY_XP = "profile_xp"
         const val KEY_ACHIEVEMENTS = "profile_unlocked_achievements"
+
+        /** Racha de días (ver [registerListeningDay]). */
+        const val KEY_STREAK_CURRENT = "profile_streak_current"
+        const val KEY_STREAK_BEST = "profile_streak_best"
+        const val KEY_STREAK_LAST_DAY = "profile_streak_last_day"
+        const val NO_DAY = -1L
+        const val DAY_MILLIS = 86_400_000L
 
         /** Clave de prefs del contador de un evento (una por [XpSource]). */
         fun counterKey(source: XpSource) = "profile_event_count_${source.name}"
