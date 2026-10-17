@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1080274975766",
+    "project_id": "audiophille-s",
+    "storage_bucket": "audiophille-s.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1080274975766:android:78831ce2b1f30399f54937",
+        "android_client_info": {
+          "package_name": "com.aistudio.audiophiles.kmvxzp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC6AgaJ13cH7EBNm9yQIO9n6Ps_GpV3Coo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
