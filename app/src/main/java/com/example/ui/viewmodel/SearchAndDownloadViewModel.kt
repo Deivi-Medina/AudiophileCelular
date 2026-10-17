@@ -1519,17 +1519,33 @@ class SearchAndDownloadViewModel(application: Application) : AndroidViewModel(ap
 
     /**
      * Contadores reales de la pestana 1. Son la CONDICION de los logros (ver
-     * [AchievementMetric]) y lo que pinta el progreso "3/5": todo sale de datos que la
-     * app ya tiene (canciones descargadas, reseñas guardadas, playlists, favoritas
-     * fijadas, nivel de XP y escuchas completas contadas por el perfil).
+     * [AchievementMetric]) y lo que pinta el progreso "3/25": todo sale de datos que la
+     * app ya tiene (canciones descargadas —y cuántas en FLAC y de cuántos artistas
+     * distintos—, reseñas guardadas —y cuántas de 4,5★ o más—, playlists, favoritas
+     * fijadas, mejor racha de días escuchando y nivel de XP).
      */
     private val achievementBaseCounters: Flow<Map<AchievementMetric, Int>> = combine(
-        localSongs, playlists, allReviews, pinnedFavorites
-    ) { songs, playlistList, reviews, pinned ->
+        localSongs, playlists, allReviews, pinnedFavorites, repository.getUserProfileManager().bestStreak
+    ) { songs, playlistList, reviews, pinned, bestStreak ->
+        val downloaded = songs.filter { it.isDownloadedFromAudiophiles }
         mapOf(
-            AchievementMetric.DOWNLOADS to songs.count { it.isDownloadedFromAudiophiles },
-            AchievementMetric.PLAYLISTS to playlistList.size,
+            AchievementMetric.DOWNLOADS to downloaded.size,
+            // FLAC / lossless: el sello de calidad de la descarga lo pone el repositorio
+            // como "bitrate formato" (p. ej. "FLAC FLAC" o "320 kbps MP3").
+            AchievementMetric.FLAC_DOWNLOADS to downloaded.count {
+                it.qualityLabel?.contains("FLAC", ignoreCase = true) == true
+            },
+            // Artistas distintos de la biblioteca descargada (nombre normalizado para no
+            // contar "Queen" y "queen" dos veces).
+            AchievementMetric.DISTINCT_ARTISTS to downloaded
+                .map { it.artist.trim().lowercase() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .size,
             AchievementMetric.REVIEWS to reviews.size,
+            AchievementMetric.FIVE_STAR_REVIEWS to reviews.count { it.rating >= 4.5f },
+            AchievementMetric.PLAYLISTS to playlistList.size,
+            AchievementMetric.BEST_STREAK to bestStreak,
             AchievementMetric.PINNED_FAVORITES to pinned.size
         )
     }
